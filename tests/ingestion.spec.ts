@@ -45,16 +45,16 @@ test.describe('HN ingestion', () => {
     } finally {
       // Cleanup: remove the keyword and everything ingested for it.
       const sel = await request.post('/api/debug/sql', {
-        data: { sql: `SELECT record_id FROM c_keywords WHERE col_term = ?`, params: [TERM] },
+        data: { sql: `SELECT _row_id FROM c_keywords WHERE col_term = ?`, params: [TERM] },
       })
-      const selJson = (await sel.json()) as { results?: Array<{ record_id: string }> }
-      for (const row of selJson.results ?? []) {
+      const selJson = (await sel.json()) as { rows?: Array<{ _row_id: string }> }
+      for (const row of selJson.rows ?? []) {
         for (const sql of [
           `DELETE FROM c_mentions WHERE col_keyword_id = ?`,
           `DELETE FROM c_sources_state WHERE col_keyword_id = ?`,
-          `DELETE FROM c_keywords WHERE record_id = ?`,
+          `DELETE FROM c_keywords WHERE _row_id = ?`,
         ]) {
-          await request.post('/api/debug/sql', { data: { sql, params: [row.record_id] } })
+          await request.post('/api/debug/sql', { data: { sql, params: [row._row_id] } })
         }
       }
     }
