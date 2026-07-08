@@ -7,6 +7,7 @@ export type Path =
   | `*`
   | `/`
   | `/admin`
+  | `/alerts`
   | `/api-status`
   | `/assistant`
   | `/cron-log`
