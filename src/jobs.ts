@@ -5,10 +5,12 @@
  */
 
 import type { Job, JobContext } from 'deepspace/worker'
-import { buildCronContext } from 'deepspace/worker'
+import { buildCronContext, enqueueJob } from 'deepspace/worker'
 import type { IngestEnv } from './ingestion/context'
-import type { Keyword, Mention } from './types'
+import type { CronContext } from './ingestion/context'
+import type { AlertRule, Keyword, Mention, WebhookEndpoint } from './types'
 import { buildScoringPrompt, parseScore, SCORING_SYSTEM_PROMPT } from './scoring'
+import { matchesRule, signPayload, formatMentionText } from './delivery'
 
 /** Cheap + fast — scoring is high-volume. */
 const SCORING_MODEL = 'claude-haiku-4-5-20251001'
@@ -21,8 +23,20 @@ export interface ScoreMentionPayload {
   keyword: Pick<Keyword, 'term' | 'keyword_type' | 'brand_context'>
 }
 
+interface DeliverSlackPayload {
+  mention: Mention
+  ruleName: string
+  channel: string
+}
+
+interface DeliverWebhookPayload {
+  mention: Mention
+  mentionId: string
+  endpointId: string
+}
+
 export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<unknown> {
-  const e = env as IngestEnv
+  const e = env as IngestEnv & { SLACK_BOT_TOKEN?: string }
   const tools = buildCronContext(e, e.OWNER_USER_ID, `app:${e.APP_NAME}`)
 
   switch (job.type) {
@@ -58,11 +72,145 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
         tags: score.tags,
       })
 
+      // Route the now-scored mention to matching alert rules + webhooks.
+      const scored: Mention = { ...mention, ...score }
+      await evaluateDeliveries(tools, e, scored, mentionId)
+
       return score
+    }
+
+    case 'deliver-slack': {
+      const { mention, ruleName, channel } = job.payload as unknown as DeliverSlackPayload
+      if (!e.SLACK_BOT_TOKEN) {
+        // Not configured — succeed with a note rather than retry-looping.
+        return { skipped: 'SLACK_BOT_TOKEN not configured' }
+      }
+      await tools.integrations.call('slack/send-message', {
+        accessToken: e.SLACK_BOT_TOKEN,
+        channel,
+        text: formatMentionText(mention, ruleName),
+        unfurl_links: false,
+      })
+      return { delivered: channel }
+    }
+
+    case 'deliver-webhook': {
+      const { mention, mentionId, endpointId } = job.payload as unknown as DeliverWebhookPayload
+
+      const endpoints = await tools.records.query('webhook_endpoints', { limit: 100 })
+      const endpoint = endpoints.find((r: { recordId: string }) => r.recordId === endpointId) as
+        | { recordId: string; data: WebhookEndpoint }
+        | undefined
+      if (!endpoint || !endpoint.data.is_active) return { skipped: 'endpoint gone or inactive' }
+
+      const body = JSON.stringify({
+        event: 'mention.scored',
+        mention: { id: mentionId, ...mention },
+        timestamp: new Date().toISOString(),
+      })
+      const signature = endpoint.data.secret ? await signPayload(endpoint.data.secret, body) : ''
+
+      let res: Response
+      try {
+        res = await fetch(endpoint.data.url, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(signature ? { 'X-Octolens-Signature': `sha256=${signature}` } : {}),
+          },
+          body,
+        })
+      } catch (err) {
+        await bumpFailure(tools, endpoint)
+        throw err // let JobRoom retry with backoff
+      }
+
+      if (!res.ok) {
+        await bumpFailure(tools, endpoint)
+        throw new Error(`Webhook endpoint responded ${res.status}`)
+      }
+
+      await tools.records.update('webhook_endpoints', endpoint.recordId, {
+        last_delivery_at: new Date().toISOString(),
+        failure_count: 0,
+      })
+      return { delivered: endpoint.data.url, status: res.status }
     }
 
     default:
       throw new Error(`Unknown job type: ${job.type}`)
+  }
+}
+
+/** Fan a scored mention out to matching alert rules and webhook endpoints. */
+async function evaluateDeliveries(
+  tools: CronContext,
+  env: IngestEnv,
+  mention: Mention,
+  mentionId: string,
+): Promise<void> {
+  const roomId = `app:${env.APP_NAME}`
+
+  const rules = (await tools.records.query('alert_rules', {
+    where: { is_active: 1 },
+    limit: 100,
+  })) as Array<{ recordId: string; data: AlertRule }>
+
+  for (const rule of rules) {
+    if (!matchesRule(mention, rule.data.match)) continue
+    if (rule.data.channel === 'slack' && rule.data.target?.channelId) {
+      await enqueueJob(env.JOB_ROOMS, roomId, 'deliver-slack', {
+        mention,
+        ruleName: rule.data.name,
+        channel: rule.data.target.channelId,
+      })
+    } else if (rule.data.channel === 'webhook' && rule.data.target?.endpointId) {
+      await enqueueJob(
+        env.JOB_ROOMS,
+        roomId,
+        'deliver-webhook',
+        { mention, mentionId, endpointId: rule.data.target.endpointId },
+        { maxAttempts: 3 },
+      )
+    }
+    // channel === 'email' is handled by the digest cron, not real-time.
+  }
+
+  // Standalone webhooks: every active endpoint whose own filters match.
+  const endpoints = (await tools.records.query('webhook_endpoints', {
+    where: { is_active: 1 },
+    limit: 100,
+  })) as Array<{ recordId: string; data: WebhookEndpoint }>
+
+  const ruleTargets = new Set(
+    rules
+      .filter((r) => r.data.channel === 'webhook')
+      .map((r) => r.data.target?.endpointId)
+      .filter(Boolean),
+  )
+  for (const endpoint of endpoints) {
+    if (ruleTargets.has(endpoint.recordId)) continue // already routed via a rule
+    if (!matchesRule(mention, endpoint.data.filters)) continue
+    await enqueueJob(
+      env.JOB_ROOMS,
+      roomId,
+      'deliver-webhook',
+      { mention, mentionId, endpointId: endpoint.recordId },
+      { maxAttempts: 3 },
+    )
+  }
+}
+
+async function bumpFailure(
+  tools: CronContext,
+  endpoint: { recordId: string; data: WebhookEndpoint },
+): Promise<void> {
+  try {
+    await tools.records.update('webhook_endpoints', endpoint.recordId, {
+      failure_count: (endpoint.data.failure_count ?? 0) + 1,
+    })
+  } catch {
+    // Never let bookkeeping mask the real delivery error.
   }
 }
 
