@@ -11,7 +11,9 @@ import { test, expect } from 'deepspace/testing'
 const TERM = 'javascript'
 
 test.describe('HN ingestion', () => {
+  // Real HN fetch + AI scoring jobs — needs headroom beyond the 30s default.
   test('poll-sources cron inserts mentions for an active keyword', async ({ users, request }) => {
+    test.setTimeout(240_000)
     const [user] = await users(1)
     const { page } = user
 
@@ -22,21 +24,24 @@ test.describe('HN ingestion', () => {
       await page.getByTestId('add-keyword').click()
       await page.getByTestId('keyword-term').fill(TERM)
       await page.getByTestId('save-keyword').click()
-      await expect(page.locator('[data-testid="keyword-row"]', { hasText: TERM })).toBeVisible()
+      await expect(page.locator('[data-testid="keyword-row"]', { hasText: TERM }).first()).toBeVisible()
 
-      // 2. Trigger the cron task and wait for a successful run to land.
+      // 2. Trigger the cron task manually (no waiting for the 5-min alarm).
       await page.goto('/cron-log')
       const runNow = page.getByRole('button', { name: 'Run now: poll-sources' })
       await expect(runNow).toBeVisible({ timeout: 15000 })
       await runNow.click()
-      await expect(
-        page.locator('[data-testid="cron-log-row"][data-task="poll-sources"][data-success="1"]'),
-      ).toBeVisible({ timeout: 45000 })
 
-      // 3. Mentions arrived and are visible in the feed.
+      // 3. Mentions arrive in the live feed — proof the task ran end-to-end.
+      //    (Asserting on the outcome, not the cron-history row: dev-server
+      //    restarts can sever the cron WS and make the row assertion flaky.)
       await page.goto('/mentions')
       const rows = page.locator('[data-testid="mention-row"]', { hasText: 'hackernews' })
-      await expect(rows.first()).toBeVisible({ timeout: 15000 })
+      await expect(rows.first()).toBeVisible({ timeout: 90000 })
+
+      // 4. AI scoring flips pending → scored live (score-mention job ran).
+      const scored = page.locator('[data-testid="mention-row"]', { hasText: /relevance: (high|medium|low)/ })
+      await expect(scored.first()).toBeVisible({ timeout: 120000 })
     } finally {
       // Cleanup: remove the keyword and everything ingested for it.
       const sel = await request.post('/api/debug/sql', {

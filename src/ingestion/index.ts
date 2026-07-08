@@ -25,6 +25,7 @@ interface KeywordEnvelope {
   recordId: string
   data: {
     term: string
+    keyword_type?: 'brand' | 'feature' | 'competitor' | 'pain_point'
     is_active?: number
     sources?: string[]
     brand_context?: string
@@ -95,9 +96,21 @@ async function pollSourceForKeyword(
     }
 
     if (recordId) {
-      await enqueueJob(env.JOB_ROOMS, `app:${env.APP_NAME}`, 'score-mention', {
-        mentionId: recordId,
-      })
+      await enqueueJob(
+        env.JOB_ROOMS,
+        `app:${env.APP_NAME}`,
+        'score-mention',
+        {
+          mentionId: recordId,
+          mention: { ...item, keyword_id: keyword.recordId },
+          keyword: {
+            term: keyword.data.term,
+            keyword_type: keyword.data.keyword_type,
+            brand_context: keyword.data.brand_context,
+          },
+        },
+        { maxAttempts: 3 },
+      )
     }
   }
 
