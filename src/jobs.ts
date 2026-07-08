@@ -29,6 +29,18 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
     case 'score-mention': {
       const { mentionId, mention, keyword } = job.payload as unknown as ScoreMentionPayload
 
+      // The mention may have been deleted (or already scored) between enqueue
+      // and pickup — check before spending an AI call. Keeps a backlog of
+      // stale jobs draining in milliseconds instead of billed seconds.
+      const [current] = await tools.records.query('mentions', {
+        where: { source: mention.source, source_id: mention.source_id },
+        limit: 1,
+      })
+      if (!current) return { skipped: 'mention deleted' }
+      if (current.data?.relevance && current.data.relevance !== 'pending') {
+        return { skipped: 'already scored' }
+      }
+
       const reply = await tools.integrations.call('anthropic/chat-completion', {
         model: SCORING_MODEL,
         max_tokens: 300,

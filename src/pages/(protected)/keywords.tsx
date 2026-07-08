@@ -19,11 +19,13 @@ const KEYWORD_TYPES: { id: KeywordType; label: string }[] = [
 const AVAILABLE_SOURCES: { id: string; label: string }[] = [
   { id: 'hackernews', label: 'Hacker News' },
   { id: 'reddit', label: 'Reddit' },
+  { id: 'bluesky', label: 'Bluesky' },
   { id: 'youtube', label: 'YouTube' },
   { id: 'github', label: 'GitHub' },
   { id: 'news', label: 'News' },
   { id: 'web', label: 'Web (Exa)' },
-  { id: 'bluesky', label: 'Bluesky' },
+  { id: 'x', label: 'X (partial)' },
+  { id: 'linkedin', label: 'LinkedIn (partial)' },
 ]
 
 const TYPE_BADGE: Record<KeywordType, 'default' | 'secondary' | 'destructive' | 'outline'> = {

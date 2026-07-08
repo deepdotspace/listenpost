@@ -23,6 +23,9 @@ test.describe('HN ingestion', () => {
       await expect(page.getByTestId('add-keyword')).toBeVisible({ timeout: 15000 })
       await page.getByTestId('add-keyword').click()
       await page.getByTestId('keyword-term').fill(TERM)
+      // Enable the other free sources alongside the default Hacker News.
+      await page.getByRole('button', { name: 'Reddit', exact: true }).click()
+      await page.getByRole('button', { name: 'Bluesky', exact: true }).click()
       await page.getByTestId('save-keyword').click()
       await expect(page.locator('[data-testid="keyword-row"]', { hasText: TERM }).first()).toBeVisible()
 
@@ -36,8 +39,12 @@ test.describe('HN ingestion', () => {
       //    (Asserting on the outcome, not the cron-history row: dev-server
       //    restarts can sever the cron WS and make the row assertion flaky.)
       await page.goto('/mentions')
-      const rows = page.locator('[data-testid="mention-row"]', { hasText: 'hackernews' })
-      await expect(rows.first()).toBeVisible({ timeout: 90000 })
+      // Reddit is enabled too but not asserted: its API is blocked from some
+      // networks (incl. this dev box) — the pipeline logs and skips it.
+      for (const source of ['hackernews', 'bluesky']) {
+        const rows = page.locator('[data-testid="mention-row"]', { hasText: source })
+        await expect(rows.first()).toBeVisible({ timeout: 90000 })
+      }
 
       // 4. AI scoring flips pending → scored live (score-mention job ran).
       const scored = page.locator('[data-testid="mention-row"]', { hasText: /relevance: (high|medium|low)/ })

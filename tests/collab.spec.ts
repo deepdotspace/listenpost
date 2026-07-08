@@ -13,19 +13,19 @@
 import { test, expect } from 'deepspace/testing'
 
 test('two users render with their own names', async ({ users }) => {
-  const [a, b] = await users(['Collab A', 'Collab B'])
+  const [a, b] = await users(2)
 
   await Promise.all([a.page.goto('/'), b.page.goto('/')])
 
   await expect(a.page.getByTestId('app-navigation')).toBeVisible({ timeout: 15_000 })
   await expect(b.page.getByTestId('app-navigation')).toBeVisible({ timeout: 15_000 })
 
-  await expect(a.page.getByTestId('nav-user-name')).toContainText('Collab A')
-  await expect(b.page.getByTestId('nav-user-name')).toContainText('Collab B')
+  await expect(a.page.getByTestId('nav-user-name')).toContainText(a.name)
+  await expect(b.page.getByTestId('nav-user-name')).toContainText(b.name)
 })
 
 test('API status page renders loading success and error states', async ({ users }) => {
-  const [user] = await users(['Collab A'])
+  const [user] = await users(1)
   let shouldFail = false
   let requestCount = 0
 
@@ -67,7 +67,7 @@ test('API status page renders loading success and error states', async ({ users 
 })
 
 test('API status page shows local retry after first-load API failure', async ({ users }) => {
-  const [user] = await users(['Collab A'])
+  const [user] = await users(1)
   let requestCount = 0
 
   await user.page.route('**/api/integrations', async (route) => {
