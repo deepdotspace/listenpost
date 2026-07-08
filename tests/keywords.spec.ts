@@ -1,0 +1,45 @@
+import { test, expect } from 'deepspace/testing'
+
+/**
+ * Keywords CRUD — signed-in happy path (Phase 1 verification).
+ * Creates a keyword, confirms it round-trips, edits it, deletes it.
+ */
+
+test.describe('Keywords CRUD', () => {
+  test('create → read → edit → delete', async ({ users }) => {
+    const [user] = await users(1)
+    const { page } = user
+    const term = `__test-${Date.now()}__ durable objects`
+    const editedTerm = `${term} (edited)`
+
+    await page.goto('/keywords')
+    await expect(page.getByTestId('add-keyword')).toBeVisible({ timeout: 15000 })
+    await expect(page.getByTestId('auth-overlay')).toHaveCount(0)
+
+    // Create
+    await page.getByTestId('add-keyword').click()
+    await page.getByTestId('keyword-term').fill(term)
+    await page.getByTestId('keyword-context').fill('We build a serverless platform; DO mentions matter.')
+    await page.getByTestId('save-keyword').click()
+
+    const row = page.locator('[data-testid="keyword-row"]', { hasText: term })
+    await expect(row).toBeVisible()
+    await expect(row.getByText('Hacker News')).toBeVisible()
+
+    // Edit
+    await row.getByRole('button', { name: 'Edit' }).click()
+    await page.getByTestId('keyword-term').fill(editedTerm)
+    await page.getByTestId('save-keyword').click()
+    const editedRow = page.locator('[data-testid="keyword-row"]', { hasText: editedTerm })
+    await expect(editedRow).toBeVisible()
+
+    // Pause / resume toggle
+    await editedRow.getByRole('button', { name: 'Pause' }).click()
+    await expect(editedRow.getByText('Paused')).toBeVisible()
+
+    // Delete (cleanup)
+    await editedRow.getByRole('button', { name: 'Delete' }).click()
+    await page.getByRole('button', { name: 'Confirm' }).click()
+    await expect(page.locator('[data-testid="keyword-row"]', { hasText: editedTerm })).toHaveCount(0)
+  })
+})
