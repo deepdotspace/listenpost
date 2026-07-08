@@ -1,35 +1,29 @@
 /**
  * Cron task definitions — registered into the AppCronRoom DO at construction
  * time (worker.ts). The DO alarm fires `runTask(name, env)` on the schedule
- * declared here; the DO itself records executions, tracks history, and
- * pushes status to admin clients via the `/ws/cron/:roomId` WebSocket.
- *
- * Each task declares EITHER `intervalMinutes` (run every N minutes) OR
- * `schedule` + `timezone` (5-field cron expression). CronRoom validates
- * the config at construction time and throws on ambiguous declarations.
- *
- * Example:
- *
- *   import type { CronTask } from 'deepspace/worker'
- *   import { buildCronContext } from 'deepspace/worker'
- *
- *   export const tasks: CronTask[] = [
- *     { name: 'heartbeat', intervalMinutes: 1 },
- *     { name: 'daily-report', schedule: '0 9 * * *', timezone: 'America/New_York' },
- *   ]
- *
- *   export async function runTask(name: string, env: Env): Promise<void> {
- *     const ctx = buildCronContext(env, env.OWNER_USER_ID, `app:${env.APP_NAME}`)
- *     if (name === 'heartbeat') {
- *       // …
- *     }
- *   }
+ * declared here; each fire is recorded in the DO's `cron_history` table and
+ * pushed to subscribers over `/ws/cron/:roomId`.
  */
 
 import type { CronTask } from 'deepspace/worker'
+import { buildCronContext } from 'deepspace/worker'
+import { runIngestion } from './ingestion'
+import type { IngestEnv } from './ingestion/context'
 
-export const tasks: CronTask[] = []
+export const tasks: CronTask[] = [
+  // Low-cost liveness probe — the cron e2e spec asserts against its history.
+  { name: 'heartbeat', intervalMinutes: 1 },
+  // Poll every active keyword × enabled source for new mentions.
+  { name: 'poll-sources', intervalMinutes: 5 },
+]
 
-export async function runTask(_name: string, _env: unknown): Promise<void> {
-  // No-op — implement your cron tasks here. Dispatch on `_name`.
+export async function runTask(name: string, env: unknown): Promise<void> {
+  if (name === 'heartbeat') return // liveness only; the DO records the run
+
+  const e = env as IngestEnv
+  const ctx = buildCronContext(e, e.OWNER_USER_ID, `app:${e.APP_NAME}`)
+
+  if (name === 'poll-sources') {
+    await runIngestion(ctx, e)
+  }
 }
