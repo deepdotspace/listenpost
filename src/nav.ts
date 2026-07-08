@@ -22,6 +22,7 @@ export const nav: NavItem[] = [
   { path: '/api-status', label: 'API Status', devOnly: true },
   { path: '/settings', label: 'Settings' },
   // ── Features add nav items below this line ──
+  { path: '/cron-log', label: 'Cron Heartbeat' },
   { path: '/admin', label: 'Admin', roles: ['admin' as Role] },
   { path: '/assistant', label: 'AI Chat', roles: ['member' as Role] },
 ]
