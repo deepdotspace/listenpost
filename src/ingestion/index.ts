@@ -14,9 +14,26 @@ import { enqueueJob } from 'deepspace/worker'
 import type { CronContext, IngestEnv } from './context'
 import type { SourceFetcher } from './types'
 import { hackernewsFetcher } from './hackernews'
+import { redditFetcher } from './reddit'
+import { blueskyFetcher } from './bluesky'
+import { youtubeFetcher } from './youtube'
+import { githubFetcher } from './github'
+import { newsFetcher } from './news'
+import { webFetcher } from './web'
+import { xFetcher, linkedinFetcher } from './social-search'
 
-/** All registered fetchers. Phase 5 adds more entries here. */
-export const FETCHERS: SourceFetcher[] = [hackernewsFetcher]
+/** All registered fetchers. */
+export const FETCHERS: SourceFetcher[] = [
+  hackernewsFetcher,
+  redditFetcher,
+  blueskyFetcher,
+  youtubeFetcher,
+  githubFetcher,
+  newsFetcher,
+  webFetcher,
+  xFetcher,
+  linkedinFetcher,
+]
 
 /** Hard cap per (keyword, source) per poll — keeps first polls bounded. */
 const MAX_INSERTS_PER_POLL = 50
@@ -62,6 +79,12 @@ async function pollSourceForKeyword(
     limit: 1,
   })
   const cursor: string | undefined = stateRow?.data?.last_seen_id || undefined
+
+  // Paid integrations poll on their own slower cadence.
+  if (fetcher.minIntervalMinutes && stateRow?.data?.last_polled_at) {
+    const elapsedMs = Date.now() - new Date(stateRow.data.last_polled_at).getTime()
+    if (elapsedMs < fetcher.minIntervalMinutes * 60_000) return
+  }
 
   const { items, nextCursor } = await fetcher.fetch(keyword.data.term, cursor, ctx)
 

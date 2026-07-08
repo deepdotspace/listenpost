@@ -23,6 +23,12 @@ export interface SourceFetcher {
   /** Matches keywords.sources entries and mentions.source values. */
   id: string
   /**
+   * Minimum minutes between polls for one keyword. Free sources omit it
+   * (polled every cron tick); owner-billed integrations set it higher so
+   * cost scales with hours, not 5-minute ticks.
+   */
+  minIntervalMinutes?: number
+  /**
    * Fetch items for `term` newer than `cursor` (undefined on first poll —
    * fetchers should backfill modestly, not the entire history).
    */
