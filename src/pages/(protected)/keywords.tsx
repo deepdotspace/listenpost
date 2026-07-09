@@ -377,7 +377,7 @@ export default function KeywordsPage() {
                 onChange={(e) => setEditor({ ...editor, brand_context: e.target.value })}
                 placeholder="What does this keyword mean for your brand? The AI scorer uses this to judge relevance."
                 rows={3}
-                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground focus:border-primary focus:ring-2 focus:ring-inset focus:ring-primary/15"
               />
             </div>
 

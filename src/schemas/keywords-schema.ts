@@ -24,7 +24,10 @@ export const keywordsSchema: CollectionSchema = {
   ownerField: 'created_by_user',
   permissions: {
     viewer: { read: true, create: false, update: false, delete: false },
-    member: { read: true, create: true, update: 'own', delete: 'own' },
+    // Keywords are shared team config: any member can edit/pause any monitor
+    // (with update:'own', a member couldn't even toggle a teammate's keyword
+    // — confusing in practice). Deleting stays creator-or-admin.
+    member: { read: true, create: true, update: true, delete: 'own' },
     admin: { read: true, create: true, update: true, delete: true },
   },
 }
