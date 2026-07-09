@@ -13,13 +13,27 @@ async function waitForApp(page: import('@playwright/test').Page) {
 test.describe('Smoke tests', () => {
   test('app loads without JS errors', async ({ page }) => {
     const errors = captureConsoleErrors(page)
-    await page.goto('/')
+    await page.goto('/home')
     await waitForApp(page)
     expect(errors).toEqual([])
   })
 
-  test('home renders the real product hero', async ({ page }) => {
+  test('landing page renders at / for signed-out visitors', async ({ page }) => {
+    const errors = captureConsoleErrors(page)
     await page.goto('/')
+    await page.waitForSelector('[data-testid="landing-page"]', { timeout: 15000 })
+    await expect(page).toHaveTitle(/Octolens/)
+    await expect(
+      page.getByRole('heading', { name: /Every mention\. Scored\. Routed\. Live\./i }),
+    ).toBeVisible()
+    // The landing owns the viewport — no stacked app chrome.
+    await expect(page.getByTestId('app-navigation')).toHaveCount(0)
+    await expect(page.getByRole('button', { name: /Start monitoring/i }).first()).toBeVisible()
+    expect(errors).toEqual([])
+  })
+
+  test('home renders the real product hero', async ({ page }) => {
+    await page.goto('/home')
     await waitForApp(page)
     await expect(page).toHaveTitle(/Octolens/)
     await expect(
@@ -30,13 +44,13 @@ test.describe('Smoke tests', () => {
   })
 
   test('navigation is visible', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/home')
     await waitForApp(page)
     await expect(page.getByTestId('app-navigation')).toBeVisible()
   })
 
   test('sign-in button visible when logged out', async ({ page }) => {
-    await page.goto('/')
+    await page.goto('/home')
     await waitForApp(page)
     await expect(page.getByTestId('nav-sign-in-button')).toBeVisible()
     await expect(page.getByTestId('nav-user-name')).toHaveCount(0)

@@ -15,6 +15,7 @@ export type Path =
   | `/cron-log`
   | `/home`
   | `/keywords`
+  | `/landing`
   | `/mentions`
   | `/pricing`
   | `/settings`

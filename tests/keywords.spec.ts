@@ -5,6 +5,15 @@ import { test, expect } from 'deepspace/testing'
  * Creates a keyword, confirms it round-trips, edits it, deletes it.
  */
 
+test.describe('Landing redirect', () => {
+  test('signed-in users land on the live feed, not the marketing page', async ({ users }) => {
+    const [user] = await users(1)
+    await user.page.goto('/')
+    await expect(user.page).toHaveURL(/\/mentions/, { timeout: 15000 })
+    await expect(user.page.getByTestId('landing-page')).toHaveCount(0)
+  })
+})
+
 test.describe('Keywords CRUD', () => {
   test('create → read → edit → delete', async ({ users }) => {
     const [user] = await users(1)
