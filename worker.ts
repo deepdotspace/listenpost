@@ -20,7 +20,7 @@ import { verifyJwt, apiWorkerFetch, platformWorkerFetch, authWorkerFetch } from 
 import type { JwtVerifierConfig, VerifyResult } from 'deepspace/worker'
 import { RecordRoom, YjsRoom, CanvasRoom, PresenceRoom, CronRoom, JobRoom } from 'deepspace/worker'
 import type { Job, JobContext, ActionTools, ActionResult, DOManifest, DOBindings } from 'deepspace/worker'
-import { actions } from './src/actions/index.js'
+import { actions, hashApiKey } from './src/actions/index.js'
 import { tasks as cronTasks, runTask as runCronTask } from './src/cron.js'
 import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
@@ -570,6 +570,122 @@ app.get(
   '/ws/jobs/:roomId',
   wsRoute((env) => env.JOB_ROOMS),
 )
+
+// ---------------------------------------------------------------------------
+// Data-layer REST API — Octolens-style. Bearer-authenticated with hashed
+// API keys (see src/actions generateApiKey), cursor pagination.
+// ---------------------------------------------------------------------------
+
+interface MentionEnvelope {
+  recordId: string
+  createdAt: string
+  data: {
+    source: string
+    source_id: string
+    body?: string
+    title?: string
+    author?: string
+    url?: string
+    published_at?: string
+    sentiment?: string
+    relevance?: string
+    relevance_score?: number
+    status?: string
+    tags?: string[]
+    keyword_ids?: string[]
+    keyword_id?: string
+    engagement?: Record<string, number>
+  }
+}
+
+app.post('/api/v2/mentions', async (c) => {
+  const header = c.req.header('Authorization')
+  const rawKey = header?.startsWith('Bearer ') ? header.slice(7) : null
+  if (!rawKey || !rawKey.startsWith('olk_')) {
+    return c.json({ error: 'missing or malformed API key' }, 401)
+  }
+
+  const tools = createActionTools(c.env, c.env.OWNER_USER_ID, '')
+  const keyHash = await hashApiKey(rawKey)
+  const keyLookup = await tools.query('api_keys', { where: { key_hash: keyHash }, limit: 1 })
+  const keyRow = keyLookup.success
+    ? (keyLookup.data as { records: Array<{ recordId: string; data: { is_active?: number; last_used_at?: string } }> }).records[0]
+    : undefined
+  if (!keyRow || !keyRow.data.is_active) {
+    return c.json({ error: 'invalid or revoked API key' }, 401)
+  }
+
+  interface MentionsRequest {
+    filters?: {
+      sources?: string[]
+      sentiment?: string[]
+      relevance?: string[]
+      status?: string[]
+      keyword_ids?: string[]
+    }
+    limit?: number
+    cursor?: string
+  }
+  let body: MentionsRequest = {}
+  try {
+    body = await c.req.json<MentionsRequest>()
+  } catch {
+    // empty body = no filters
+  }
+  const limit = Math.min(Math.max(body.limit ?? 25, 1), 100)
+  const f = body.filters ?? {}
+
+  const result = await tools.query<MentionEnvelope['data']>('mentions', {
+    orderBy: 'createdAt',
+    orderDir: 'desc',
+    limit: 500,
+  })
+  if (!result.success) return c.json({ error: 'query failed' }, 500)
+  let rows: MentionEnvelope[] = result.data.records
+
+  if (body.cursor) rows = rows.filter((r) => r.createdAt < body.cursor!)
+  rows = rows.filter((r) => {
+    const m = r.data
+    if (f.sources?.length && !f.sources.includes(m.source)) return false
+    if (f.sentiment?.length && !f.sentiment.includes(m.sentiment ?? '')) return false
+    if (f.relevance?.length && !f.relevance.includes(m.relevance ?? '')) return false
+    if (f.status?.length && !f.status.includes(m.status ?? 'new')) return false
+    if (f.keyword_ids?.length) {
+      const ids = m.keyword_ids ?? (m.keyword_id ? [m.keyword_id] : [])
+      if (!ids.some((id) => f.keyword_ids!.includes(id))) return false
+    }
+    return true
+  })
+
+  const page = rows.slice(0, limit)
+  const nextCursor = rows.length > limit ? page[page.length - 1]?.createdAt : undefined
+
+  // Best-effort usage stamp, throttled to once a minute per key.
+  const lastUsed = keyRow.data.last_used_at ? new Date(keyRow.data.last_used_at).getTime() : 0
+  if (Date.now() - lastUsed > 60_000) {
+    await tools.update('api_keys', keyRow.recordId, { last_used_at: new Date().toISOString() })
+  }
+
+  return c.json({
+    mentions: page.map((r) => ({
+      id: r.recordId,
+      source: r.data.source,
+      title: r.data.title ?? '',
+      body: r.data.body ?? '',
+      author: r.data.author ?? '',
+      url: r.data.url ?? '',
+      timestamp: r.data.published_at || r.createdAt,
+      sentiment: r.data.sentiment ?? 'pending',
+      relevance: r.data.relevance ?? 'pending',
+      relevance_score: r.data.relevance_score ?? 0,
+      status: r.data.status ?? 'new',
+      tags: r.data.tags ?? [],
+      keywords: r.data.keyword_ids ?? (r.data.keyword_id ? [r.data.keyword_id] : []),
+      engagement_metrics: r.data.engagement ?? {},
+    })),
+    ...(nextCursor ? { nextCursor } : {}),
+  })
+})
 
 // ---------------------------------------------------------------------------
 // Server actions
