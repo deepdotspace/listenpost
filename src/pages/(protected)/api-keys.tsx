@@ -6,7 +6,18 @@
 
 import { useState } from 'react'
 import { useQuery, useMutations, getAuthToken } from 'deepspace'
-import { Badge, Button, Input, Modal, ConfirmModal, EmptyState, useToast } from '@/components/ui'
+import { KeyRound } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Input,
+  Modal,
+  ConfirmModal,
+  EmptyState,
+  SkeletonList,
+  useToast,
+} from '@/components/ui'
+import { PageHeader, SectionLabel } from '../../components/PageHeader'
 import type { ApiKey } from '../../types'
 
 export default function ApiKeysPage() {
@@ -43,66 +54,119 @@ export default function ApiKeysPage() {
     }
   }
 
+  const loading = status === 'loading'
+  const list = keys ?? []
+
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <div className="mx-auto max-w-3xl px-6 py-12">
-        <h1 className="text-3xl font-bold tracking-tight">API keys</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Bearer credentials for the data-layer API. Query mentions with{' '}
-          <code className="rounded bg-muted px-1.5 py-0.5 text-xs">POST /api/v2/mentions</code>.
-        </p>
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        title="API"
+        meta={<span>{loading ? '' : `${list.length} ${list.length === 1 ? 'key' : 'keys'}`}</span>}
+      />
 
-        <div className="mt-6 flex gap-2">
-          <Input
-            data-testid="key-label"
-            value={label}
-            onChange={(e) => setLabel(e.target.value)}
-            placeholder="Key label, e.g. 'zapier-prod'"
-          />
-          <Button data-testid="generate-key" onClick={generate} disabled={generating || !label.trim()}>
-            {generating ? 'Generating…' : 'Generate key'}
-          </Button>
-        </div>
+      <div className="flex-1 px-4 py-4 sm:px-6">
+        <div className="mx-auto max-w-3xl space-y-6">
+          <p className="text-[13px] text-muted-foreground">
+            Bearer credentials for the data-layer API. Query mentions with{' '}
+            <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+              POST /api/v2/mentions
+            </code>
+            .
+          </p>
 
-        <div className="mt-8">
-          {status !== 'loading' && (keys ?? []).length === 0 && (
-            <EmptyState title="No API keys" description="Generate one to query your mentions programmatically." />
-          )}
-          <ul className="space-y-2">
-            {(keys ?? []).map((k) => (
-              <li
-                key={k.recordId}
-                data-testid="key-row"
-                className="flex items-center justify-between gap-3 rounded-lg border border-border bg-card p-3"
+          {/* Generate row */}
+          <div className="rounded-lg border border-border bg-card/50 p-3">
+            <div className="flex gap-2">
+              <Input
+                data-testid="key-label"
+                value={label}
+                onChange={(e) => setLabel(e.target.value)}
+                placeholder="Key label, e.g. 'zapier-prod'"
+                className="h-9 text-[13px]"
+              />
+              <Button
+                size="sm"
+                data-testid="generate-key"
+                onClick={generate}
+                disabled={generating || !label.trim()}
               >
-                <div>
-                  <div className="flex items-center gap-2">
-                    <span className="font-medium">{k.data.label}</span>
-                    <code className="rounded bg-muted px-1.5 py-0.5 text-xs">{k.data.prefix}…</code>
-                    {!k.data.is_active && <Badge variant="secondary">revoked</Badge>}
-                  </div>
-                  <p className="mt-0.5 text-xs text-muted-foreground">
-                    {k.data.last_used_at
-                      ? `last used ${new Date(k.data.last_used_at).toLocaleString()}`
-                      : 'never used'}
-                  </p>
-                </div>
-                <Button size="sm" variant="ghost" data-testid="revoke-key" onClick={() => setRevoking(k.recordId)}>
-                  Revoke
-                </Button>
-              </li>
-            ))}
-          </ul>
-        </div>
+                {generating ? 'Generating…' : 'Generate key'}
+              </Button>
+            </div>
+          </div>
 
-        <div className="mt-10 rounded-lg border border-border bg-card p-4 text-sm">
-          <h2 className="font-semibold">Quick start</h2>
-          <pre className="mt-2 overflow-x-auto rounded bg-muted p-3 text-xs">
-            {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/v2/mentions \\
+          {/* Key list */}
+          <section className="space-y-2">
+            <SectionLabel>Keys</SectionLabel>
+
+            {loading && <SkeletonList rows={3} />}
+
+            {!loading && list.length === 0 && (
+              <div className="rounded-lg border border-border">
+                <EmptyState
+                  icon={<KeyRound aria-hidden />}
+                  title="No API keys"
+                  description="Generate one to query your mentions programmatically."
+                />
+              </div>
+            )}
+
+            {!loading && list.length > 0 && (
+              <ul className="divide-y divide-border rounded-lg border border-border bg-card/50">
+                {list.map((k) => (
+                  <li
+                    key={k.recordId}
+                    data-testid="key-row"
+                    className="flex items-center gap-3 px-4 py-3"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+                        <span className="text-[13px] font-medium text-foreground">{k.data.label}</span>
+                        <span className="font-mono text-[11px] text-muted-foreground">
+                          {k.data.prefix}…
+                        </span>
+                        {!k.data.is_active && (
+                          <Badge variant="secondary" size="sm">
+                            revoked
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-muted-foreground/80">
+                        {k.createdAt && <span>created {new Date(k.createdAt).toLocaleString()}</span>}
+                        <span>
+                          {k.data.last_used_at
+                            ? `last used ${new Date(k.data.last_used_at).toLocaleString()}`
+                            : 'never used'}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      data-testid="revoke-key"
+                      onClick={() => setRevoking(k.recordId)}
+                      className="h-7 px-2.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      Revoke
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </section>
+
+          {/* Quick start */}
+          <section className="space-y-2">
+            <SectionLabel>Quick start</SectionLabel>
+            <div className="overflow-x-auto rounded-lg border border-border bg-card p-4">
+              <pre className="font-mono text-[12px] leading-relaxed text-foreground">
+                {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/v2/mentions \\
   -H "Authorization: Bearer olk_..." \\
   -H "Content-Type: application/json" \\
   -d '{"filters":{"sentiment":["negative"]},"limit":25}'`}
-          </pre>
+              </pre>
+            </div>
+          </section>
         </div>
       </div>
 
@@ -114,11 +178,14 @@ export default function ApiKeysPage() {
           </Modal.Description>
         </Modal.Header>
         <Modal.Body>
-          <code data-testid="raw-key" className="block break-all rounded bg-muted p-3 font-mono text-sm">
-            {rawKey}
-          </code>
+          <div className="rounded-lg border border-primary/30 bg-primary/[0.06] p-3">
+            <code data-testid="raw-key" className="block break-all font-mono text-[12px] leading-relaxed text-foreground">
+              {rawKey}
+            </code>
+          </div>
           <div className="mt-4 flex justify-end gap-2">
             <Button
+              size="sm"
               variant="secondary"
               onClick={() => {
                 if (rawKey) void navigator.clipboard.writeText(rawKey)
@@ -127,7 +194,9 @@ export default function ApiKeysPage() {
             >
               Copy
             </Button>
-            <Button onClick={() => setRawKey(null)}>Done</Button>
+            <Button size="sm" onClick={() => setRawKey(null)}>
+              Done
+            </Button>
           </div>
         </Modal.Body>
       </Modal>

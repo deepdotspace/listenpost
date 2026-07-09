@@ -11,7 +11,7 @@ import { DeepSpaceAuthProvider, useAuthStatus } from 'deepspace'
 import { RecordProvider, RecordScope } from 'deepspace'
 import { ErrorScreen } from '../components/ErrorScreen'
 import { ToastProvider } from '@/components/ui'
-import Navigation from '../components/Navigation'
+import AppShell from '../components/AppShell'
 import { APP_NAME, SCOPE_ID } from '../constants'
 import { schemas } from '../schemas'
 
@@ -27,13 +27,20 @@ export default function App() {
         <AuthBoot>
           {/* data-testid="app-root" is the canonical "app shell mounted" hook
               every test relies on. Don't rename without updating templates/tests. */}
-          <div data-testid="app-root" className="flex h-screen flex-col bg-background overflow-hidden">
-            {!isLanding && <Navigation />}
-            <main className="flex-1 overflow-y-auto min-h-0">
-              <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
-                <Outlet />
-              </Suspense>
-            </main>
+          <div data-testid="app-root" className="h-screen overflow-hidden bg-background">
+            {isLanding ? (
+              <main className="h-full overflow-y-auto">
+                <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
+                  <Outlet />
+                </Suspense>
+              </main>
+            ) : (
+              <AppShell>
+                <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
+                  <Outlet />
+                </Suspense>
+              </AppShell>
+            )}
           </div>
         </AuthBoot>
       </DeepSpaceAuthProvider>

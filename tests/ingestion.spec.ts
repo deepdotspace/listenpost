@@ -47,7 +47,9 @@ test.describe('HN ingestion', () => {
       }
 
       // 4. AI scoring flips pending → scored live (score-mention job ran).
-      const scored = page.locator('[data-testid="mention-row"]', { hasText: /relevance: (high|medium|low)/ })
+      const scored = page.locator(
+        '[data-testid="mention-row"]:not([data-relevance="pending"])',
+      )
       await expect(scored.first()).toBeVisible({ timeout: 120000 })
     } finally {
       // Cleanup: remove the keyword and everything ingested for it.

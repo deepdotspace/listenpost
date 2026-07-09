@@ -7,7 +7,8 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery } from 'deepspace'
-import { EmptyState } from '@/components/ui'
+import { EmptyState, cn } from '@/components/ui'
+import { PageHeader, SectionLabel } from '../../components/PageHeader'
 import type { Keyword, Mention } from '../../types'
 
 // Validated against surface #141b2c (midnight card): all ≥3:1, CVD ΔE 41+.
@@ -22,9 +23,9 @@ const KEYWORD_TYPE_COLOR: Record<string, string> = {
 const SENTIMENT_COLOR = { positive: '#0ca30c', neutral: '#898781', negative: '#d03b3b' }
 
 const RANGES = [
-  { id: 7, label: 'Last 7 days' },
-  { id: 30, label: 'Last 30 days' },
-  { id: 90, label: 'Last 90 days' },
+  { id: 7, label: 'Last 7 days', short: '7d' },
+  { id: 30, label: 'Last 30 days', short: '30d' },
+  { id: 90, label: 'Last 90 days', short: '90d' },
 ]
 
 interface Tip {
@@ -98,50 +99,62 @@ export default function AnalyticsPage() {
   const highRelevance = scored.filter((r) => r.data.relevance === 'high').length
 
   return (
-    <div className="min-h-full bg-background text-foreground" onMouseLeave={() => setTip(null)}>
-      <div className="mx-auto max-w-5xl px-6 py-10">
-        <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Analytics</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {windowed.length} mentions in the selected window
-            </p>
-          </div>
-          <div className="flex gap-1.5" data-testid="range-filter">
+    <div className="flex min-h-full flex-col" onMouseLeave={() => setTip(null)}>
+      <PageHeader
+        title="Analytics"
+        meta={<span>{windowed.length} mentions in window</span>}
+        actions={
+          <div
+            data-testid="range-filter"
+            className="flex items-center gap-0.5 rounded-md border border-border bg-card/50 p-0.5"
+            role="group"
+            aria-label="Time range"
+          >
             {RANGES.map((r) => (
               <button
                 key={r.id}
                 type="button"
                 onClick={() => setRangeDays(r.id)}
-                className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                aria-label={r.label}
+                title={r.label}
+                aria-pressed={rangeDays === r.id}
+                className={cn(
+                  'inline-flex h-7 items-center rounded-[5px] px-2.5 text-xs font-medium transition-colors',
                   rangeDays === r.id
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border text-muted-foreground hover:bg-secondary'
-                }`}
+                    ? 'bg-secondary text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
               >
-                {r.label}
+                {r.short}
               </button>
             ))}
           </div>
-        </div>
+        }
+      />
 
+      <div className="flex-1 px-4 py-4 sm:px-6">
         {status !== 'loading' && windowed.length === 0 && (
-          <EmptyState title="No data in this window" description="Mentions will show up here as they're ingested." />
+          <div className="mb-4 rounded-lg border border-border">
+            <EmptyState
+              title="No data in this window"
+              description="Mentions will show up here as they're ingested."
+            />
+          </div>
         )}
 
         {/* Stat tiles */}
-        <div className="grid gap-4 sm:grid-cols-4" data-testid="stat-tiles">
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="stat-tiles">
           <StatTile label="Mentions" value={windowed.length} />
           <StatTile label="AI-scored" value={scored.length} />
           <StatTile label="High relevance" value={highRelevance} />
           <StatTile label="Negative" value={negatives} />
         </div>
 
-        <div className="mt-6 grid gap-6 lg:grid-cols-2">
+        <div className="mt-3 grid gap-3 lg:grid-cols-2">
           {/* Volume by source */}
           <ChartCard title="Volume by source" testId="chart-sources">
             {bySource.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No data.</p>
+              <p className="text-[13px] text-muted-foreground">No data.</p>
             ) : (
               <HBars
                 rows={bySource.map(([source, count]) => ({
@@ -163,7 +176,7 @@ export default function AnalyticsPage() {
           {/* Share of voice */}
           <ChartCard title="Share of voice" testId="chart-sov">
             {shareOfVoice.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No keyword-attributed mentions yet.</p>
+              <p className="text-[13px] text-muted-foreground">No keyword-attributed mentions yet.</p>
             ) : (
               <>
                 <HBars
@@ -193,7 +206,7 @@ export default function AnalyticsPage() {
         </div>
 
         {/* Sentiment over time */}
-        <div className="mt-6">
+        <div className="mt-3">
           <ChartCard title={`Sentiment by day (last ${Math.min(rangeDays, 30)} days)`} testId="chart-sentiment">
             <SentimentBars days={sentimentByDay} onHover={setTip} />
             <Legend
@@ -228,17 +241,19 @@ export default function AnalyticsPage() {
 
 function StatTile({ label, value }: { label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-border bg-card p-4">
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="mt-1 text-3xl font-semibold tabular-nums">{value}</p>
+    <div className="rounded-lg border border-border bg-card/50 px-4 py-3">
+      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
+      <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
+        {value}
+      </p>
     </div>
   )
 }
 
 function ChartCard({ title, testId, children }: { title: string; testId: string; children: React.ReactNode }) {
   return (
-    <section data-testid={testId} className="rounded-lg border border-border bg-card p-4">
-      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+    <section data-testid={testId} className="rounded-lg border border-border bg-card/50 p-4">
+      <SectionLabel className="mb-3">{title}</SectionLabel>
       {children}
     </section>
   )
@@ -246,10 +261,10 @@ function ChartCard({ title, testId, children }: { title: string; testId: string;
 
 function Legend({ items }: { items: { label: string; color: string }[] }) {
   return (
-    <div className="mt-3 flex flex-wrap gap-3">
+    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
       {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
-          <span className="h-2.5 w-2.5 rounded-sm" style={{ backgroundColor: i.color }} />
+        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
+          <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: i.color }} />
           {i.label}
         </span>
       ))}
@@ -419,15 +434,15 @@ function TableFallback({
   if (rows.length === 0) return null
   return (
     <details className="mt-3">
-      <summary className="cursor-pointer text-xs text-muted-foreground hover:text-foreground">
+      <summary className="inline-flex cursor-pointer list-none items-center rounded text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
         View as table
       </summary>
       <table className="mt-2 w-full text-xs">
         <caption className="sr-only">{caption}</caption>
         <thead>
-          <tr className="border-b border-border text-left text-muted-foreground">
+          <tr className="border-b border-border text-left text-[11px] text-muted-foreground">
             {headers.map((h) => (
-              <th key={h} className="py-1 pr-3 font-medium">
+              <th key={h} className="py-1.5 pr-3 font-medium">
                 {h}
               </th>
             ))}
@@ -437,7 +452,7 @@ function TableFallback({
           {rows.map((r, i) => (
             <tr key={i} className="border-b border-border/50">
               {r.map((cell, j) => (
-                <td key={j} className="py-1 pr-3 tabular-nums">
+                <td key={j} className="py-1.5 pr-3 tabular-nums text-foreground/90">
                   {cell}
                 </td>
               ))}

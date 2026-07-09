@@ -13,7 +13,6 @@ export type Path =
   | `/api-status`
   | `/assistant`
   | `/cron-log`
-  | `/home`
   | `/keywords`
   | `/landing`
   | `/mentions`

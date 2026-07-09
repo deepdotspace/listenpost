@@ -57,12 +57,15 @@ test.describe('Multiplayer triage', () => {
       await expect(a.page.getByTestId('presence-peer').first()).toBeVisible({ timeout: 15000 })
       await expect(b.page.getByTestId('presence-peer').first()).toBeVisible({ timeout: 15000 })
 
-      // A resolves → B sees the resolved state live (no reload).
+      // A resolves via the status menu → B sees the resolved state live.
+      await rowA.getByTestId('status-menu-trigger').click()
       await rowA.getByTestId('set-status-resolved').click()
       await expect(rowB).toHaveAttribute('data-status', 'resolved', { timeout: 10000 })
       await expect(rowB.getByTestId('status-badge')).toHaveText('resolved')
 
-      // B assigns themselves a note → A sees it (bidirectional sync).
+      // B leaves a note → A sees it (bidirectional sync). The note input is
+      // behind a per-row toggle until a note exists.
+      await rowB.getByTestId('note-toggle').click()
       await rowB.getByTestId('mention-notes').fill('checked — known issue')
       await rowB.getByTestId('mention-notes').blur()
       await expect(rowA.getByTestId('mention-notes')).toHaveValue('checked — known issue', {

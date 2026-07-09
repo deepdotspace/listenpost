@@ -372,3 +372,29 @@
   --shadow-card-hover: 0 2px 8px 0 rgba(101, 163, 13, 0.056);
 }
 
+
+/* Octolens — refined product theme: near-black cool charcoal, hairline
+   borders, one confident blue. Purpose-built for the monitoring console. */
+[data-theme="octolens"] {
+  --color-background: #0b0d12;
+  --color-foreground: #e8eaf0;
+  --color-card: #10131a;
+  --color-card-foreground: #e8eaf0;
+  --color-popover: #151924;
+  --color-popover-foreground: #e8eaf0;
+  --color-primary: #5b9dff;
+  --color-primary-foreground: #0b0d12;
+  --color-secondary: #171b26;
+  --color-secondary-foreground: #e8eaf0;
+  --color-muted: #151823;
+  --color-muted-foreground: #8b93a7;
+  --color-accent: #1c2231;
+  --color-accent-foreground: #e8eaf0;
+  --color-destructive: #f0555d;
+  --color-destructive-foreground: #ffffff;
+  --color-border: rgba(148, 163, 199, 0.14);
+  --color-input: rgba(148, 163, 199, 0.18);
+  --color-ring: #5b9dff;
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+  --shadow-card-hover: 0 4px 16px 0 rgba(0, 0, 0, 0.4);
+}
