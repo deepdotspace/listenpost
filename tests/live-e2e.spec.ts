@@ -77,9 +77,9 @@ test.describe('Live production e2e', () => {
       await expect(hnRows.first()).toBeVisible({ timeout: 120_000 })
 
       // …and the AI scorer flips them from pending to a verdict, live.
-      const scoredRow = page.locator('[data-testid="mention-row"]', {
-        hasText: /relevance: (high|medium|low)/,
-      })
+      const scoredRow = page.locator(
+        '[data-testid="mention-row"]:not([data-relevance="pending"])',
+      )
       await expect(scoredRow.first()).toBeVisible({ timeout: 180_000 })
     } finally {
       await ctx.close()

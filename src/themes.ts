@@ -12,6 +12,12 @@
  */
 
 export const THEMES = [
+  // ── Custom ───────────────────────────────────────────────────────────────
+  {
+    id: 'octolens',
+    label: 'Octolens',
+    description: 'Near-black charcoal with one confident blue. The product theme.',
+  },
   // ── Dark ─────────────────────────────────────────────────────────────────
   {
     id: 'slate',

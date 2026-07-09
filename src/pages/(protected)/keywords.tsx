@@ -5,7 +5,18 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery, useMutations, useUser } from 'deepspace'
-import { Button, Badge, Input, Modal, ConfirmModal, EmptyState, useToast } from '@/components/ui'
+import {
+  Button,
+  Badge,
+  Input,
+  Modal,
+  ConfirmModal,
+  EmptyState,
+  SkeletonList,
+  useToast,
+  cn,
+} from '@/components/ui'
+import { PageHeader } from '../../components/PageHeader'
 import type { Keyword, KeywordType } from '../../types'
 
 const KEYWORD_TYPES: { id: KeywordType; label: string }[] = [
@@ -27,13 +38,6 @@ const AVAILABLE_SOURCES: { id: string; label: string }[] = [
   { id: 'x', label: 'X (partial)' },
   { id: 'linkedin', label: 'LinkedIn (partial)' },
 ]
-
-const TYPE_BADGE: Record<KeywordType, 'default' | 'secondary' | 'destructive' | 'outline'> = {
-  brand: 'default',
-  feature: 'secondary',
-  competitor: 'destructive',
-  pain_point: 'outline',
-}
 
 interface EditorState {
   recordId: string | null
@@ -64,6 +68,8 @@ export default function KeywordsPage() {
   const canEdit = user?.role === 'member' || user?.role === 'admin'
 
   const sorted = useMemo(() => records ?? [], [records])
+  const activeCount = useMemo(() => sorted.filter((r) => r.data.is_active).length, [sorted])
+  const loading = status === 'loading'
 
   async function save() {
     if (!editor || !editor.term.trim()) return
@@ -112,95 +118,122 @@ export default function KeywordsPage() {
   }
 
   return (
-    <div className="min-h-full bg-background text-foreground">
-      <div className="mx-auto max-w-4xl px-6 py-12">
-        <div className="mb-8 flex items-center justify-between">
-          <div>
-            <h1 className="text-3xl font-bold tracking-tight">Keywords</h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Terms we monitor across sources. Brand context tunes AI relevance scoring.
-            </p>
-          </div>
-          {canEdit && (
-            <Button data-testid="add-keyword" onClick={() => setEditor({ ...EMPTY_EDITOR })}>
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        title="Keywords"
+        meta={
+          <span>
+            {sorted.length} {sorted.length === 1 ? 'monitor' : 'monitors'} · {activeCount} active
+          </span>
+        }
+        actions={
+          canEdit && (
+            <Button data-testid="add-keyword" size="sm" onClick={() => setEditor({ ...EMPTY_EDITOR })}>
               Add keyword
             </Button>
-          )}
-        </div>
+          )
+        }
+      />
 
-        {status === 'loading' && (
-          <div className="py-16 text-center text-muted-foreground">Loading…</div>
+      <div className="flex-1 px-4 py-4 sm:px-6">
+        {loading && <SkeletonList rows={5} />}
+
+        {!loading && sorted.length === 0 && (
+          <div className="rounded-lg border border-border">
+            <EmptyState
+              title="No keywords yet"
+              description="Add your brand, features, competitors, or pain points to start monitoring."
+              {...(canEdit
+                ? { action: { label: 'Add keyword', onClick: () => setEditor({ ...EMPTY_EDITOR }) } }
+                : {})}
+            />
+          </div>
         )}
 
-        {status !== 'loading' && sorted.length === 0 && (
-          <EmptyState
-            title="No keywords yet"
-            description="Add your brand, features, competitors, or pain points to start monitoring."
-          />
-        )}
-
-        <ul className="space-y-3" data-testid="keyword-list">
-          {sorted.map((r) => {
-            const k = r.data
-            return (
-              <li
-                key={r.recordId}
-                data-testid="keyword-row"
-                className="flex items-start justify-between gap-4 rounded-lg border border-border bg-card p-4"
-              >
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-semibold">{k.term}</span>
-                    <Badge variant={TYPE_BADGE[k.keyword_type] ?? 'secondary'}>
-                      {KEYWORD_TYPES.find((t) => t.id === k.keyword_type)?.label ?? k.keyword_type}
-                    </Badge>
-                    {!k.is_active && <Badge variant="outline">Paused</Badge>}
-                  </div>
-                  {k.brand_context && (
-                    <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{k.brand_context}</p>
+        {!loading && sorted.length > 0 && (
+          <ul
+            className="divide-y divide-border rounded-lg border border-border bg-card/50"
+            data-testid="keyword-list"
+          >
+            {sorted.map((r) => {
+              const k = r.data
+              return (
+                <li
+                  key={r.recordId}
+                  data-testid="keyword-row"
+                  className={cn(
+                    'group flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-secondary/40 sm:px-5',
+                    !k.is_active && 'opacity-70',
                   )}
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    Sources:{' '}
-                    {(k.sources ?? []).length > 0
-                      ? (k.sources ?? [])
-                          .map((s) => AVAILABLE_SOURCES.find((a) => a.id === s)?.label ?? s)
-                          .join(', ')
-                      : 'none'}
-                  </p>
-                </div>
-                {canEdit && (
-                  <div className="flex shrink-0 gap-2">
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => toggleActive(r.recordId, k.is_active)}
-                    >
-                      {k.is_active ? 'Pause' : 'Resume'}
-                    </Button>
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      onClick={() =>
-                        setEditor({
-                          recordId: r.recordId,
-                          term: k.term,
-                          keyword_type: k.keyword_type ?? 'brand',
-                          brand_context: k.brand_context ?? '',
-                          sources: k.sources ?? [],
-                        })
-                      }
-                    >
-                      Edit
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => setDeleting(r.recordId)}>
-                      Delete
-                    </Button>
+                >
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="text-[13.5px] font-medium leading-snug text-foreground">
+                        {k.term}
+                      </span>
+                      <Badge variant="outline" size="sm" className="text-muted-foreground">
+                        {KEYWORD_TYPES.find((t) => t.id === k.keyword_type)?.label ?? k.keyword_type}
+                      </Badge>
+                      {!k.is_active && (
+                        <Badge variant="outline" size="sm" className="border-warning/40 text-warning">
+                          Paused
+                        </Badge>
+                      )}
+                    </div>
+                    {k.brand_context && (
+                      <p className="mt-1 line-clamp-1 text-[13px] leading-relaxed text-muted-foreground">
+                        {k.brand_context}
+                      </p>
+                    )}
+                    <p className="mt-1 font-mono text-[11px] text-muted-foreground/80">
+                      {(k.sources ?? []).length > 0
+                        ? (k.sources ?? [])
+                            .map((s) => AVAILABLE_SOURCES.find((a) => a.id === s)?.label ?? s)
+                            .join(' · ')
+                        : 'no sources'}
+                    </p>
                   </div>
-                )}
-              </li>
-            )
-          })}
-        </ul>
+                  {canEdit && (
+                    <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => toggleActive(r.recordId, k.is_active)}
+                      >
+                        {k.is_active ? 'Pause' : 'Resume'}
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() =>
+                          setEditor({
+                            recordId: r.recordId,
+                            term: k.term,
+                            keyword_type: k.keyword_type ?? 'brand',
+                            brand_context: k.brand_context ?? '',
+                            sources: k.sources ?? [],
+                          })
+                        }
+                      >
+                        Edit
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground"
+                        onClick={() => setDeleting(r.recordId)}
+                      >
+                        Delete
+                      </Button>
+                    </div>
+                  )}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </div>
 
       <Modal open={editor !== null} onClose={() => setEditor(null)}>
@@ -210,9 +243,10 @@ export default function KeywordsPage() {
         {editor && (
           <Modal.Body className="space-y-4">
             <div>
-              <label className="mb-1 block text-sm font-medium">Term</label>
+              <label className="mb-1.5 block text-[13px] font-medium text-foreground">Term</label>
               <Input
                 data-testid="keyword-term"
+                className="text-[13px]"
                 value={editor.term}
                 onChange={(e) => setEditor({ ...editor, term: e.target.value })}
                 placeholder="e.g. durable objects"
@@ -221,13 +255,14 @@ export default function KeywordsPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Type</label>
-              <div className="flex flex-wrap gap-2">
+              <label className="mb-1.5 block text-[13px] font-medium text-foreground">Type</label>
+              <div className="flex flex-wrap gap-1.5">
                 {KEYWORD_TYPES.map((t) => (
                   <Button
                     key={t.id}
                     type="button"
                     size="sm"
+                    className="h-7 px-2.5 text-xs"
                     variant={editor.keyword_type === t.id ? 'default' : 'secondary'}
                     onClick={() => setEditor({ ...editor, keyword_type: t.id })}
                   >
@@ -238,20 +273,22 @@ export default function KeywordsPage() {
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Brand context</label>
+              <label className="mb-1.5 block text-[13px] font-medium text-foreground">
+                Brand context
+              </label>
               <textarea
                 data-testid="keyword-context"
                 value={editor.brand_context}
                 onChange={(e) => setEditor({ ...editor, brand_context: e.target.value })}
                 placeholder="What does this keyword mean for your brand? The AI scorer uses this to judge relevance."
                 rows={3}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
               />
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium">Sources</label>
-              <div className="flex flex-wrap gap-2">
+              <label className="mb-1.5 block text-[13px] font-medium text-foreground">Sources</label>
+              <div className="flex flex-wrap gap-1.5">
                 {AVAILABLE_SOURCES.map((s) => {
                   const on = editor.sources.includes(s.id)
                   return (
@@ -259,6 +296,7 @@ export default function KeywordsPage() {
                       key={s.id}
                       type="button"
                       size="sm"
+                      className="h-7 px-2.5 text-xs"
                       variant={on ? 'default' : 'secondary'}
                       onClick={() =>
                         setEditor({
@@ -277,10 +315,15 @@ export default function KeywordsPage() {
             </div>
 
             <div className="flex justify-end gap-2 pt-2">
-              <Button variant="secondary" onClick={() => setEditor(null)}>
+              <Button variant="secondary" size="sm" onClick={() => setEditor(null)}>
                 Cancel
               </Button>
-              <Button data-testid="save-keyword" onClick={save} disabled={saving || !editor.term.trim()}>
+              <Button
+                data-testid="save-keyword"
+                size="sm"
+                onClick={save}
+                disabled={saving || !editor.term.trim()}
+              >
                 {saving ? 'Saving…' : 'Save'}
               </Button>
             </div>

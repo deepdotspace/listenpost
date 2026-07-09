@@ -9,7 +9,7 @@ import { defineConfig } from '@playwright/test'
  */
 export default defineConfig({
   testDir: '.',
-  testMatch: '**/live-e2e.spec.ts',
+  testMatch: '**/live-*.spec.ts',
   timeout: 300_000,
   retries: 0,
   workers: 1,
