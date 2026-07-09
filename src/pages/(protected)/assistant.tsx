@@ -188,9 +188,13 @@ export default function AiChatPage() {
     <div className="flex h-full min-h-0 flex-col">
       <PageHeader
         title="Assistant"
-        meta={<span className="truncate">asks questions over your mentions data</span>}
+        meta={<span className="truncate">Ask anything about your mentions</span>}
         actions={
           <>
+            <span className="mr-1 hidden items-center gap-1.5 rounded-[7px] border border-input px-2.5 py-1 font-mono text-[11px] text-muted-foreground sm:inline-flex">
+              <span className="h-1.5 w-1.5 rounded-full bg-success" aria-hidden />
+              Claude · Sonnet
+            </span>
             <button
               type="button"
               onClick={() => setRailOpen((v) => !v)}
@@ -238,7 +242,7 @@ export default function AiChatPage() {
               <>
                 {activeChatId && (
                   <div className="px-4 pt-2">
-                    <div className="mx-auto max-w-[44rem]">
+                    <div className="mx-auto max-w-[764px]">
                       <ChatTitleBar chatId={activeChatId} title={activeTitle} onRename={handleRename} />
                     </div>
                   </div>
@@ -247,7 +251,7 @@ export default function AiChatPage() {
                   <div className="px-4 pt-2">
                     <div
                       role="alert"
-                      className="mx-auto max-w-[44rem] rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive"
+                      className="mx-auto max-w-[764px] rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-[13px] text-destructive"
                     >
                       <div className="flex items-start gap-2">
                         <span className="flex-1 leading-relaxed">{createError}</span>

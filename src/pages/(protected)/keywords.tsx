@@ -5,14 +5,15 @@
 
 import { useMemo, useState } from 'react'
 import { useQuery, useMutations, useUser } from 'deepspace'
+import { Plus, MoreVertical } from 'lucide-react'
 import {
   Button,
-  Badge,
   Input,
   Modal,
   ConfirmModal,
   EmptyState,
   SkeletonList,
+  DropdownMenu,
   useToast,
   cn,
 } from '@/components/ui'
@@ -39,6 +40,49 @@ const AVAILABLE_SOURCES: { id: string; label: string }[] = [
   { id: 'linkedin', label: 'LinkedIn (partial)' },
 ]
 
+/** Type-badge palette — exact tints from the design system. */
+const TYPE_BADGE: Record<KeywordType, string> = {
+  brand: 'bg-primary/[0.08] text-primary',
+  feature: 'bg-[#e7f2ff] text-[#2563eb]',
+  competitor: 'bg-[#fdeaea] text-[#d64b4b]',
+  pain_point: 'bg-[#fdf3e7] text-[#b4761f]',
+}
+
+/** 32×18 accent switch — drives the same is_active mutation as before. */
+function Toggle({
+  on,
+  onClick,
+  disabled,
+  label,
+}: {
+  on: boolean
+  onClick: () => void
+  disabled?: boolean
+  label?: string
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors disabled:cursor-default disabled:opacity-60',
+        on ? 'bg-primary' : 'bg-[#d5d9df]',
+      )}
+    >
+      <span
+        className={cn(
+          'h-3.5 w-3.5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-transform',
+          on && 'translate-x-[14px]',
+        )}
+      />
+    </button>
+  )
+}
+
 interface EditorState {
   recordId: string | null
   term: string
@@ -54,6 +98,8 @@ const EMPTY_EDITOR: EditorState = {
   brand_context: '',
   sources: ['hackernews'],
 }
+
+const GRID = 'grid-cols-[1.6fr_110px_1fr_90px_70px_40px]'
 
 export default function KeywordsPage() {
   const { records, status } = useQuery<Keyword>('keywords', { orderBy: 'createdAt', orderDir: 'desc' })
@@ -123,23 +169,29 @@ export default function KeywordsPage() {
         title="Keywords"
         meta={
           <span>
-            {sorted.length} {sorted.length === 1 ? 'monitor' : 'monitors'} · {activeCount} active
+            {sorted.length} tracked · {activeCount} active
           </span>
         }
         actions={
           canEdit && (
-            <Button data-testid="add-keyword" size="sm" onClick={() => setEditor({ ...EMPTY_EDITOR })}>
+            <Button
+              data-testid="add-keyword"
+              size="sm"
+              onClick={() => setEditor({ ...EMPTY_EDITOR })}
+              className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
+            >
+              <Plus aria-hidden />
               Add keyword
             </Button>
           )
         }
       />
 
-      <div className="flex-1 px-4 py-4 sm:px-6">
+      <div className="flex-1 px-4 py-5 sm:px-5">
         {loading && <SkeletonList rows={5} />}
 
         {!loading && sorted.length === 0 && (
-          <div className="rounded-lg border border-border">
+          <div className="rounded-xl border border-border shadow-card">
             <EmptyState
               title="No keywords yet"
               description="Add your brand, features, competitors, or pain points to start monitoring."
@@ -151,88 +203,131 @@ export default function KeywordsPage() {
         )}
 
         {!loading && sorted.length > 0 && (
-          <ul
-            className="divide-y divide-border rounded-lg border border-border bg-card/50"
-            data-testid="keyword-list"
-          >
-            {sorted.map((r) => {
-              const k = r.data
-              return (
-                <li
-                  key={r.recordId}
-                  data-testid="keyword-row"
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+            <div className="overflow-x-auto">
+              <div className="min-w-[680px]" data-testid="keyword-list">
+                {/* Column header */}
+                <div
                   className={cn(
-                    'group flex items-start justify-between gap-3 px-4 py-3 transition-colors hover:bg-secondary/40 sm:px-5',
-                    !k.is_active && 'opacity-70',
+                    'grid items-center gap-3.5 border-b border-border px-[18px] py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-tertiary',
+                    GRID,
                   )}
                 >
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="text-[13.5px] font-medium leading-snug text-foreground">
-                        {k.term}
-                      </span>
-                      <Badge variant="outline" size="sm" className="text-muted-foreground">
-                        {KEYWORD_TYPES.find((t) => t.id === k.keyword_type)?.label ?? k.keyword_type}
-                      </Badge>
-                      {!k.is_active && (
-                        <Badge variant="outline" size="sm" className="border-warning/40 text-warning">
-                          Paused
-                        </Badge>
+                  <span>Keyword</span>
+                  <span>Type</span>
+                  <span>Sources</span>
+                  <span className="text-right">Mentions</span>
+                  <span className="text-center">Active</span>
+                  <span />
+                </div>
+
+                {sorted.map((r) => {
+                  const k = r.data
+                  const active = !!k.is_active
+                  return (
+                    <div
+                      key={r.recordId}
+                      data-testid="keyword-row"
+                      className={cn(
+                        'group grid items-center gap-3.5 border-b border-border px-[18px] py-[13px] transition-colors last:border-b-0 hover:bg-[#fafbfc]',
+                        GRID,
+                        !active && 'opacity-60',
                       )}
+                    >
+                      {/* Keyword */}
+                      <div className="min-w-0">
+                        <div className="truncate text-[13.5px] font-semibold text-foreground">{k.term}</div>
+                        {k.brand_context && (
+                          <div className="truncate text-[11.5px] text-tertiary">{k.brand_context}</div>
+                        )}
+                      </div>
+
+                      {/* Type */}
+                      <div>
+                        <span
+                          className={cn(
+                            'inline-flex h-5 items-center rounded-md px-2 text-[10.5px] font-semibold',
+                            TYPE_BADGE[k.keyword_type] ?? TYPE_BADGE.pain_point,
+                          )}
+                        >
+                          {KEYWORD_TYPES.find((t) => t.id === k.keyword_type)?.label ?? k.keyword_type}
+                        </span>
+                      </div>
+
+                      {/* Sources */}
+                      <div className="flex flex-wrap gap-1.5">
+                        {(k.sources ?? []).length > 0 ? (
+                          (k.sources ?? []).map((s) => (
+                            <span
+                              key={s}
+                              className="rounded-[5px] border border-input px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground"
+                            >
+                              {AVAILABLE_SOURCES.find((a) => a.id === s)?.label ?? s}
+                            </span>
+                          ))
+                        ) : (
+                          <span className="font-mono text-[10px] text-tertiary">no sources</span>
+                        )}
+                      </div>
+
+                      {/* Mentions — count not tracked on the keyword record */}
+                      <div className="text-right text-[13px] font-semibold tabular-nums text-tertiary">—</div>
+
+                      {/* Active toggle */}
+                      <div className="flex justify-center">
+                        <Toggle
+                          on={active}
+                          disabled={!canEdit}
+                          label={active ? 'Pause keyword' : 'Resume keyword'}
+                          onClick={() => toggleActive(r.recordId, k.is_active)}
+                        />
+                      </div>
+
+                      {/* Overflow menu */}
+                      <div className="flex justify-center">
+                        {canEdit && (
+                          <DropdownMenu>
+                            <DropdownMenu.Trigger
+                              chevron={false}
+                              aria-label="Keyword actions"
+                              className="h-[26px] w-[26px] justify-center border-transparent px-0 text-tertiary hover:bg-secondary hover:text-foreground [&_svg]:size-[15px]"
+                            >
+                              <MoreVertical aria-hidden />
+                            </DropdownMenu.Trigger>
+                            <DropdownMenu.Content align="end">
+                              <DropdownMenu.Item
+                                onClick={() =>
+                                  setEditor({
+                                    recordId: r.recordId,
+                                    term: k.term,
+                                    keyword_type: k.keyword_type ?? 'brand',
+                                    brand_context: k.brand_context ?? '',
+                                    sources: k.sources ?? [],
+                                  })
+                                }
+                              >
+                                Edit
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Item onClick={() => toggleActive(r.recordId, k.is_active)}>
+                                {active ? 'Pause' : 'Resume'}
+                              </DropdownMenu.Item>
+                              <DropdownMenu.Separator />
+                              <DropdownMenu.Item
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => setDeleting(r.recordId)}
+                              >
+                                Delete
+                              </DropdownMenu.Item>
+                            </DropdownMenu.Content>
+                          </DropdownMenu>
+                        )}
+                      </div>
                     </div>
-                    {k.brand_context && (
-                      <p className="mt-1 line-clamp-1 text-[13px] leading-relaxed text-muted-foreground">
-                        {k.brand_context}
-                      </p>
-                    )}
-                    <p className="mt-1 font-mono text-[11px] text-muted-foreground/80">
-                      {(k.sources ?? []).length > 0
-                        ? (k.sources ?? [])
-                            .map((s) => AVAILABLE_SOURCES.find((a) => a.id === s)?.label ?? s)
-                            .join(' · ')
-                        : 'no sources'}
-                    </p>
-                  </div>
-                  {canEdit && (
-                    <div className="flex shrink-0 items-center gap-1 opacity-60 transition-opacity group-hover:opacity-100">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={() => toggleActive(r.recordId, k.is_active)}
-                      >
-                        {k.is_active ? 'Pause' : 'Resume'}
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={() =>
-                          setEditor({
-                            recordId: r.recordId,
-                            term: k.term,
-                            keyword_type: k.keyword_type ?? 'brand',
-                            brand_context: k.brand_context ?? '',
-                            sources: k.sources ?? [],
-                          })
-                        }
-                      >
-                        Edit
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="text-muted-foreground"
-                        onClick={() => setDeleting(r.recordId)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
         )}
       </div>
 
@@ -246,7 +341,7 @@ export default function KeywordsPage() {
               <label className="mb-1.5 block text-[13px] font-medium text-foreground">Term</label>
               <Input
                 data-testid="keyword-term"
-                className="text-[13px]"
+                className="h-9 text-[13px]"
                 value={editor.term}
                 onChange={(e) => setEditor({ ...editor, term: e.target.value })}
                 placeholder="e.g. durable objects"
@@ -282,7 +377,7 @@ export default function KeywordsPage() {
                 onChange={(e) => setEditor({ ...editor, brand_context: e.target.value })}
                 placeholder="What does this keyword mean for your brand? The AI scorer uses this to judge relevance."
                 rows={3}
-                className="w-full rounded-md border border-border bg-background px-3 py-2 text-[13px] outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
+                className="w-full rounded-lg border border-input bg-background px-3 py-2 text-[13px] leading-relaxed outline-none placeholder:text-muted-foreground focus:ring-2 focus:ring-ring"
               />
             </div>
 
@@ -337,6 +432,7 @@ export default function KeywordsPage() {
         onConfirm={confirmDelete}
         title="Delete keyword?"
         description="Existing mentions stay; we just stop crawling for this term."
+        confirmText="Delete"
       />
     </div>
   )

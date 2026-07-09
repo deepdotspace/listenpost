@@ -373,28 +373,40 @@
 }
 
 
-/* Octolens — refined product theme: near-black cool charcoal, hairline
-   borders, one confident blue. Purpose-built for the monitoring console. */
+/*
+ * Octolens — light console theme (Stripe / Height / Linear grade).
+ * Crisp light surfaces, indigo accent, hairline borders. Token names are
+ * unchanged from the shadcn baseline so components need no color edits.
+ */
 [data-theme="octolens"] {
-  --color-background: #0b0d12;
-  --color-foreground: #e8eaf0;
-  --color-card: #10131a;
-  --color-card-foreground: #e8eaf0;
-  --color-popover: #151924;
-  --color-popover-foreground: #e8eaf0;
-  --color-primary: #5b9dff;
-  --color-primary-foreground: #0b0d12;
-  --color-secondary: #171b26;
-  --color-secondary-foreground: #e8eaf0;
-  --color-muted: #151823;
-  --color-muted-foreground: #8b93a7;
-  --color-accent: #1c2231;
-  --color-accent-foreground: #e8eaf0;
-  --color-destructive: #f0555d;
+  color-scheme: light;
+
+  --color-background: #ffffff;
+  --color-foreground: #191c20;
+  --color-card: #ffffff;
+  --color-card-foreground: #191c20;
+  --color-popover: #ffffff;
+  --color-popover-foreground: #191c20;
+  --color-primary: #4f46e5;            /* indigo accent */
+  --color-primary-foreground: #ffffff;
+  --color-secondary: #f5f6f8;          /* subtle hover fill */
+  --color-secondary-foreground: #191c20;
+  --color-muted: #f5f6f8;
+  --color-muted-foreground: #5a616b;   /* secondary text */
+  --color-accent: #eef0f3;             /* active / pressed fill */
+  --color-accent-foreground: #191c20;
+  --color-destructive: #f43f5e;
   --color-destructive-foreground: #ffffff;
-  --color-border: rgba(148, 163, 199, 0.14);
-  --color-input: rgba(148, 163, 199, 0.18);
-  --color-ring: #5b9dff;
-  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
-  --shadow-card-hover: 0 4px 16px 0 rgba(0, 0, 0, 0.4);
+  --color-border: #edeef1;             /* hairline borders */
+  --color-input: #dfe2e8;              /* input / stronger border */
+  --color-ring: #4f46e5;
+
+  /* Extended surface + text tokens */
+  --color-sidebar: #fbfbfc;
+  --color-panel: #f7f8fa;
+  --color-tertiary: #949aa4;
+
+  /* Shadows — barely-there, Linear/Stripe style */
+  --shadow-card: 0 1px 2px 0 rgba(0, 0, 0, 0.03);
+  --shadow-card-hover: 0 2px 8px 0 rgba(0, 0, 0, 0.06);
 }

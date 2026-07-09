@@ -35,20 +35,24 @@ test.describe('Keywords CRUD', () => {
     await expect(row).toBeVisible()
     await expect(row.getByText('Hacker News')).toBeVisible()
 
-    // Edit
-    await row.getByRole('button', { name: 'Edit' }).click()
+    // Edit — via the row's overflow menu.
+    await row.getByRole('button', { name: 'Keyword actions' }).click()
+    await page.getByRole('menuitem', { name: 'Edit' }).click()
     await page.getByTestId('keyword-term').fill(editedTerm)
     await page.getByTestId('save-keyword').click()
     const editedRow = page.locator('[data-testid="keyword-row"]', { hasText: editedTerm })
     await expect(editedRow).toBeVisible()
 
-    // Pause / resume toggle
-    await editedRow.getByRole('button', { name: 'Pause' }).click()
-    await expect(editedRow.getByText('Paused')).toBeVisible()
+    // Pause — the active toggle is a role=switch; flipping it clears the checked state.
+    const toggle = editedRow.getByRole('switch')
+    await expect(toggle).toHaveAttribute('aria-checked', 'true')
+    await toggle.click()
+    await expect(toggle).toHaveAttribute('aria-checked', 'false')
 
-    // Delete (cleanup)
-    await editedRow.getByRole('button', { name: 'Delete' }).click()
-    await page.getByRole('button', { name: 'Confirm' }).click()
+    // Delete (cleanup) — via the overflow menu → Confirm.
+    await editedRow.getByRole('button', { name: 'Keyword actions' }).click()
+    await page.getByRole('menuitem', { name: 'Delete' }).click()
+    await page.locator('dialog[open]').getByRole('button', { name: 'Delete' }).click()
     await expect(page.locator('[data-testid="keyword-row"]', { hasText: editedTerm })).toHaveCount(0)
   })
 })

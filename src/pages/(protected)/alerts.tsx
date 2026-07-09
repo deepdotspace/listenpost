@@ -5,7 +5,18 @@
 
 import { useState, type ReactNode } from 'react'
 import { useQuery, useMutations, useUser } from 'deepspace'
-import { Badge, Button, Input, Modal, ConfirmModal, EmptyState, useToast, cn } from '@/components/ui'
+import { Plus, MoreVertical } from 'lucide-react'
+import {
+  Badge,
+  Button,
+  Input,
+  Modal,
+  ConfirmModal,
+  EmptyState,
+  DropdownMenu,
+  useToast,
+  cn,
+} from '@/components/ui'
 import { PageHeader, SectionLabel } from '../../components/PageHeader'
 import type { AlertRule, AlertRuleMatch, Digest, Sentiment, WebhookEndpoint } from '../../types'
 
@@ -13,80 +24,94 @@ const SOURCES = ['hackernews', 'reddit', 'bluesky', 'youtube', 'github', 'news',
 const SENTIMENTS: Sentiment[] = ['positive', 'negative', 'neutral']
 const RELEVANCES = ['low', 'medium', 'high'] as const
 
-export default function AlertsPage() {
-  const { user } = useUser()
-  const isAdmin = user?.role === 'admin'
-
-  return (
-    <div className="flex min-h-full flex-col">
-      <PageHeader
-        title="Delivery"
-        meta={<span>Slack, webhooks &amp; email digests</span>}
-      />
-      <div className="space-y-4 px-4 py-4 sm:px-6">
-        <RulesSection />
-        {isAdmin && <WebhooksSection />}
-        <DigestsSection />
-      </div>
-    </div>
-  )
+/** Colored square per delivery channel. */
+const CHANNEL_COLOR: Record<string, string> = {
+  slack: '#4a154b',
+  email: '#2563eb',
+  webhook: '#7a8290',
 }
 
-// ─── Shared section + row scaffolding ────────────────────────────────────────
+type RuleEditor = {
+  recordId: string | null
+  name: string
+  channel: 'slack' | 'webhook'
+  channelId: string
+  endpointId: string
+  match: AlertRuleMatch
+}
 
-function Section({
+const EMPTY_RULE: RuleEditor = {
+  recordId: null,
+  name: '',
+  channel: 'slack',
+  channelId: '',
+  endpointId: '',
+  match: {},
+}
+
+// ─── Small presentational atoms ──────────────────────────────────────────────
+
+/** 32×18 accent switch — drives the same is_active mutation as before. */
+function Toggle({
+  on,
+  onClick,
   label,
-  description,
-  action,
-  children,
 }: {
-  label: string
-  description: string
-  action?: ReactNode
-  children: ReactNode
+  on: boolean
+  onClick: () => void
+  label?: string
 }) {
   return (
-    <section className="rounded-lg border border-border bg-card/50">
-      <div className="flex items-center gap-3 border-b border-border px-4 py-2.5">
-        <div className="min-w-0 flex-1">
-          <SectionLabel>{label}</SectionLabel>
-          <p className="mt-0.5 text-[11.5px] text-muted-foreground">{description}</p>
-        </div>
-        {action && <div className="shrink-0">{action}</div>}
-      </div>
-      {children}
-    </section>
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors',
+        on ? 'bg-primary' : 'bg-[#d5d9df]',
+      )}
+    >
+      <span
+        className={cn(
+          'h-3.5 w-3.5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-transform',
+          on && 'translate-x-[14px]',
+        )}
+      />
+    </button>
   )
 }
 
-/** Compact row-action cluster — quiet until the row is hovered/focused. */
-function RowActions({
-  active,
-  onToggle,
+function RowMenu({
   onEdit,
+  onToggle,
+  active,
   onDelete,
 }: {
-  active: boolean
-  onToggle: () => void
   onEdit?: () => void
+  onToggle: () => void
+  active: boolean
   onDelete: () => void
 }) {
-  const base =
-    'inline-flex h-6 items-center rounded-md px-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground'
   return (
-    <div className="flex shrink-0 items-center gap-0.5 opacity-60 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-      <button type="button" className={base} onClick={onToggle}>
-        {active ? 'Pause' : 'Resume'}
-      </button>
-      {onEdit && (
-        <button type="button" className={base} onClick={onEdit}>
-          Edit
-        </button>
-      )}
-      <button type="button" className={cn(base, 'hover:text-destructive')} onClick={onDelete}>
-        Delete
-      </button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenu.Trigger
+        chevron={false}
+        aria-label="Actions"
+        className="h-[26px] w-[26px] justify-center border-transparent px-0 text-tertiary hover:bg-secondary hover:text-foreground [&_svg]:size-[15px]"
+      >
+        <MoreVertical aria-hidden />
+      </DropdownMenu.Trigger>
+      <DropdownMenu.Content align="end">
+        {onEdit && <DropdownMenu.Item onClick={onEdit}>Edit</DropdownMenu.Item>}
+        <DropdownMenu.Item onClick={onToggle}>{active ? 'Pause' : 'Resume'}</DropdownMenu.Item>
+        <DropdownMenu.Separator />
+        <DropdownMenu.Item className="text-destructive hover:text-destructive" onClick={onDelete}>
+          Delete
+        </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
   )
 }
 
@@ -141,7 +166,7 @@ function MatchEditor({
           />
         ))}
       </div>
-      <p className="text-[11.5px] text-muted-foreground/80">Empty groups match everything.</p>
+      <p className="text-[11.5px] text-tertiary">Empty groups match everything.</p>
     </div>
   )
 }
@@ -155,7 +180,7 @@ function ToggleChip({ active, label, onClick }: { active: boolean; label: string
         'inline-flex h-[22px] items-center rounded-md border px-1.5 font-mono text-[11px] transition-colors',
         active
           ? 'border-primary/40 bg-primary/10 text-primary'
-          : 'border-border text-muted-foreground hover:bg-secondary hover:text-foreground',
+          : 'border-input text-muted-foreground hover:bg-secondary hover:text-foreground',
       )}
     >
       {label}
@@ -174,16 +199,16 @@ function SegmentedGroup<T extends string>({
   onChange: (v: T) => void
 }) {
   return (
-    <div className="inline-flex rounded-md border border-border p-0.5">
+    <div className="inline-flex rounded-lg border border-border bg-accent p-0.5">
       {options.map((opt) => (
         <button
           key={opt}
           type="button"
           onClick={() => onChange(opt)}
           className={cn(
-            'inline-flex h-6 items-center rounded px-2.5 text-xs font-medium transition-colors',
+            'inline-flex h-[26px] items-center rounded-[7px] px-2.5 text-xs font-semibold transition-colors',
             value === opt
-              ? 'bg-secondary text-foreground'
+              ? 'bg-background text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.1)]'
               : 'text-muted-foreground hover:text-foreground',
           )}
         >
@@ -198,25 +223,37 @@ function FieldLabel({ children }: { children: ReactNode }) {
   return <label className="mb-1 block text-[13px] font-medium text-foreground">{children}</label>
 }
 
-// ─── Alert rules ─────────────────────────────────────────────────────────────
+function describeMatch(match: AlertRuleMatch | undefined): string {
+  if (!match) return 'matches everything'
+  const parts: string[] = []
+  if (match.sources?.length) parts.push(`sources: ${match.sources.join(', ')}`)
+  if (match.sentiment?.length) parts.push(`sentiment: ${match.sentiment.join('/')}`)
+  if (match.relevance_min) parts.push(`relevance ≥ ${match.relevance_min}`)
+  if (match.tags?.length) parts.push(`tags: ${match.tags.join(', ')}`)
+  return parts.length ? parts.join(' · ') : 'matches everything'
+}
 
-function RulesSection() {
-  const { records: rules } = useQuery<AlertRule>('alert_rules', { orderBy: 'createdAt' })
-  const { records: endpoints } = useQuery<WebhookEndpoint>('webhook_endpoints', { limit: 50 })
-  const { create, put, remove } = useMutations<AlertRule>('alert_rules')
-  const { success, error } = useToast()
+// ─── Page ────────────────────────────────────────────────────────────────────
+
+export default function AlertsPage() {
   const { user } = useUser()
+  const isAdmin = user?.role === 'admin'
   const canEdit = user?.role === 'member' || user?.role === 'admin'
 
-  const [editing, setEditing] = useState<null | {
-    recordId: string | null
-    name: string
-    channel: 'slack' | 'webhook'
-    channelId: string
-    endpointId: string
-    match: AlertRuleMatch
-  }>(null)
+  const { records: rules } = useQuery<AlertRule>('alert_rules', { orderBy: 'createdAt' })
+  const { records: endpoints } = useQuery<WebhookEndpoint>('webhook_endpoints', { limit: 50 })
+  const { records: digests } = useQuery<Digest>('digests', { limit: 50 })
+  const { create, put, remove } = useMutations<AlertRule>('alert_rules')
+  const { success, error } = useToast()
+
+  const [editing, setEditing] = useState<RuleEditor | null>(null)
   const [deleting, setDeleting] = useState<string | null>(null)
+
+  const ruleList = rules ?? []
+  const slackRules = ruleList.filter((r) => r.data.channel === 'slack').length
+  const endpointCount = (endpoints ?? []).length
+  const digestCount = (digests ?? []).length
+  const channelCount = [slackRules > 0, digestCount > 0, endpointCount > 0].filter(Boolean).length
 
   async function save() {
     if (!editing || !editing.name.trim()) return
@@ -241,85 +278,146 @@ function RulesSection() {
   }
 
   function ruleTarget(r: AlertRule): string {
-    if (r.channel === 'slack') return `slack · ${r.target?.channelId || 'no channel'}`
+    if (r.channel === 'slack') return r.target?.channelId || 'no channel'
+    if (r.channel === 'email') return r.target?.email || 'no address'
     const ep = (endpoints ?? []).find((e) => e.recordId === r.target?.endpointId)
-    return `webhook · ${ep?.data.label || ep?.data.url || 'missing endpoint'}`
+    return ep?.data.label || ep?.data.url || 'missing endpoint'
   }
 
   return (
-    <Section
-      label="Alert rules"
-      description="Real-time routing — a scored mention that matches goes straight to the target."
-      action={
-        canEdit && (
-          <Button
-            size="sm"
-            className="h-7 px-2.5 text-xs"
-            data-testid="add-rule"
-            onClick={() =>
-              setEditing({ recordId: null, name: '', channel: 'slack', channelId: '', endpointId: '', match: {} })
-            }
-          >
-            Add rule
-          </Button>
-        )
-      }
-    >
-      {(rules ?? []).length === 0 ? (
-        <EmptyState
-          className="py-10"
-          title="No rules yet"
-          description='e.g. "negative sentiment → Slack #alerts"'
-        />
-      ) : (
-        <ul className="divide-y divide-border">
-          {(rules ?? []).map((r) => (
-            <li
-              key={r.recordId}
-              data-testid="rule-row"
-              className={cn(
-                'group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/40',
-                !r.data.is_active && 'opacity-55',
-              )}
+    <div className="flex min-h-full flex-col">
+      <PageHeader
+        title="Delivery"
+        meta={
+          <span>
+            {ruleList.length} {ruleList.length === 1 ? 'rule' : 'rules'} · {channelCount}{' '}
+            {channelCount === 1 ? 'channel' : 'channels'}
+          </span>
+        }
+        actions={
+          canEdit && (
+            <Button
+              size="sm"
+              data-testid="add-rule"
+              className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
+              onClick={() => setEditing({ ...EMPTY_RULE })}
             >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="text-[13px] font-medium text-foreground">{r.data.name}</span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
-                    {ruleTarget(r.data)}
-                  </span>
-                  {!r.data.is_active && (
-                    <Badge variant="secondary" size="sm">
-                      paused
-                    </Badge>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
-                  {describeMatch(r.data.match)}
-                </p>
-              </div>
-              {canEdit && (
-                <RowActions
-                  active={!!r.data.is_active}
-                  onToggle={() => put(r.recordId, { is_active: r.data.is_active ? 0 : 1 })}
-                  onEdit={() =>
-                    setEditing({
-                      recordId: r.recordId,
-                      name: r.data.name,
-                      channel: r.data.channel === 'webhook' ? 'webhook' : 'slack',
-                      channelId: r.data.target?.channelId ?? '',
-                      endpointId: r.data.target?.endpointId ?? '',
-                      match: r.data.match ?? {},
-                    })
-                  }
-                  onDelete={() => setDeleting(r.recordId)}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+              <Plus aria-hidden />
+              New rule
+            </Button>
+          )
+        }
+      />
 
+      <div className="space-y-5 px-4 py-5 sm:px-5">
+        {/* ── Alert rules ── */}
+        <section>
+          <SectionLabel className="mb-2.5 text-tertiary">Alert rules</SectionLabel>
+          <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+            {ruleList.length === 0 ? (
+              <EmptyState
+                className="py-10"
+                title="No rules yet"
+                description='e.g. "negative sentiment → Slack #alerts"'
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <div className="min-w-[620px]">
+                  {ruleList.map((r) => {
+                    const active = !!r.data.is_active
+                    return (
+                      <div
+                        key={r.recordId}
+                        data-testid="rule-row"
+                        className={cn(
+                          'group grid grid-cols-[1fr_130px_150px_54px_34px] items-center gap-3.5 border-b border-border px-[18px] py-[13px] transition-colors last:border-b-0 hover:bg-[#fafbfc]',
+                          !active && 'opacity-60',
+                        )}
+                      >
+                        <div className="min-w-0">
+                          <div className="truncate text-[13px] font-semibold text-foreground">
+                            {r.data.name}
+                          </div>
+                          <div className="truncate text-[11.5px] text-tertiary">
+                            {describeMatch(r.data.match)}
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5 text-[12px] capitalize text-muted-foreground">
+                          <span
+                            className="h-[7px] w-[7px] rounded-[2px]"
+                            style={{ background: CHANNEL_COLOR[r.data.channel] ?? '#7a8290' }}
+                          />
+                          {r.data.channel}
+                        </div>
+                        <div className="truncate font-mono text-[11.5px] text-muted-foreground">
+                          {ruleTarget(r.data)}
+                        </div>
+                        <div className="flex justify-center">
+                          <Toggle
+                            on={active}
+                            label={active ? 'Pause rule' : 'Resume rule'}
+                            onClick={() => put(r.recordId, { is_active: active ? 0 : 1 })}
+                          />
+                        </div>
+                        <div className="flex justify-center">
+                          {canEdit && (
+                            <RowMenu
+                              active={active}
+                              onToggle={() => put(r.recordId, { is_active: active ? 0 : 1 })}
+                              onEdit={() =>
+                                setEditing({
+                                  recordId: r.recordId,
+                                  name: r.data.name,
+                                  channel: r.data.channel === 'webhook' ? 'webhook' : 'slack',
+                                  channelId: r.data.target?.channelId ?? '',
+                                  endpointId: r.data.target?.endpointId ?? '',
+                                  match: r.data.match ?? {},
+                                })
+                              }
+                              onDelete={() => setDeleting(r.recordId)}
+                            />
+                          )}
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        {/* ── Channels summary ── */}
+        <section>
+          <SectionLabel className="mb-2.5 text-tertiary">Channels</SectionLabel>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <ChannelCard
+              name="Slack"
+              active={slackRules > 0}
+              activeLabel="Connected"
+              meta={`${slackRules} ${slackRules === 1 ? 'rule' : 'rules'}`}
+            />
+            <ChannelCard
+              name="Email"
+              active={digestCount > 0}
+              activeLabel="Verified"
+              meta={`${digestCount} ${digestCount === 1 ? 'digest' : 'digests'}`}
+            />
+            <ChannelCard
+              name="Webhook"
+              active={endpointCount > 0}
+              activeLabel="Active"
+              meta={`${endpointCount} ${endpointCount === 1 ? 'endpoint' : 'endpoints'}`}
+            />
+          </div>
+        </section>
+
+        {/* Management sections (functional; kept below the summary) */}
+        {isAdmin && <WebhooksSection />}
+        <DigestsSection />
+      </div>
+
+      {/* Rule editor */}
       <Modal open={editing !== null} onClose={() => setEditing(null)}>
         <Modal.Header onClose={() => setEditing(null)}>
           <Modal.Title>{editing?.recordId ? 'Edit rule' : 'Add rule'}</Modal.Title>
@@ -330,7 +428,7 @@ function RulesSection() {
               <FieldLabel>Name</FieldLabel>
               <Input
                 data-testid="rule-name"
-                className="h-8 text-[13px]"
+                className="h-9 text-[13px]"
                 value={editing.name}
                 onChange={(e) => setEditing({ ...editing, name: e.target.value })}
                 placeholder="Negative sentiment → #alerts"
@@ -349,7 +447,7 @@ function RulesSection() {
               <div>
                 <FieldLabel>Slack channel ID</FieldLabel>
                 <Input
-                  className="h-8 font-mono text-[13px]"
+                  className="h-9 font-mono text-[13px]"
                   value={editing.channelId}
                   onChange={(e) => setEditing({ ...editing, channelId: e.target.value })}
                   placeholder="C0123456789"
@@ -377,16 +475,10 @@ function RulesSection() {
             )}
             <MatchEditor match={editing.match} onChange={(m) => setEditing({ ...editing, match: m })} />
             <div className="flex justify-end gap-2 pt-2">
-              <Button size="sm" variant="secondary" className="h-8 text-[13px]" onClick={() => setEditing(null)}>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                className="h-8 text-[13px]"
-                data-testid="save-rule"
-                onClick={save}
-                disabled={!editing.name.trim()}
-              >
+              <Button size="sm" data-testid="save-rule" onClick={save} disabled={!editing.name.trim()}>
                 Save
               </Button>
             </div>
@@ -402,19 +494,39 @@ function RulesSection() {
           setDeleting(null)
         }}
         title="Delete rule?"
+        confirmText="Delete"
       />
-    </Section>
+    </div>
   )
 }
 
-function describeMatch(match: AlertRuleMatch | undefined): string {
-  if (!match) return 'matches everything'
-  const parts: string[] = []
-  if (match.sources?.length) parts.push(`sources: ${match.sources.join(', ')}`)
-  if (match.sentiment?.length) parts.push(`sentiment: ${match.sentiment.join('/')}`)
-  if (match.relevance_min) parts.push(`relevance ≥ ${match.relevance_min}`)
-  if (match.tags?.length) parts.push(`tags: ${match.tags.join(', ')}`)
-  return parts.length ? parts.join(' · ') : 'matches everything'
+function ChannelCard({
+  name,
+  active,
+  activeLabel,
+  meta,
+}: {
+  name: string
+  active: boolean
+  activeLabel: string
+  meta: string
+}) {
+  return (
+    <div className="rounded-xl border border-border bg-card p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="text-[13px] font-semibold text-foreground">{name}</span>
+        {active ? (
+          <span className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-[#0f9d6b]">
+            <span className="h-1.5 w-1.5 rounded-full bg-success" />
+            {activeLabel}
+          </span>
+        ) : (
+          <span className="text-[11px] font-semibold text-tertiary">Not configured</span>
+        )}
+      </div>
+      <div className="mt-1.5 text-[12px] text-tertiary">{meta}</div>
+    </div>
+  )
 }
 
 // ─── Webhook endpoints (admin) ───────────────────────────────────────────────
@@ -457,11 +569,17 @@ function WebhooksSection() {
     }
   }
 
+  const list = endpoints ?? []
+
   return (
-    <Section
-      label="Webhook endpoints"
-      description="Deliveries are HMAC-signed (X-Octolens-Signature). Discord-compatible."
-      action={
+    <section>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <SectionLabel className="text-tertiary">Webhook endpoints</SectionLabel>
+          <p className="mt-0.5 text-[11.5px] text-tertiary">
+            Deliveries are HMAC-signed (X-Octolens-Signature). Discord-compatible.
+          </p>
+        </div>
         <Button
           size="sm"
           className="h-7 px-2.5 text-xs"
@@ -472,68 +590,74 @@ function WebhooksSection() {
         >
           Add endpoint
         </Button>
-      }
-    >
-      {(endpoints ?? []).length === 0 ? (
-        <EmptyState
-          className="py-10"
-          title="No endpoints"
-          description="POST scored mentions anywhere — Zapier, Discord, your backend."
-        />
-      ) : (
-        <ul className="divide-y divide-border">
-          {(endpoints ?? []).map((ep) => (
-            <li
-              key={ep.recordId}
-              data-testid="endpoint-row"
-              className={cn(
-                'group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/40',
-                !ep.data.is_active && 'opacity-55',
-              )}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="text-[13px] font-medium text-foreground">
-                    {ep.data.label || 'endpoint'}
-                  </span>
-                  {!ep.data.is_active && (
-                    <Badge variant="secondary" size="sm">
-                      paused
-                    </Badge>
-                  )}
-                  {(ep.data.failure_count ?? 0) > 0 && (
-                    <Badge variant="destructive" size="sm">
-                      {ep.data.failure_count} failures
-                    </Badge>
-                  )}
-                </div>
-                <p className="mt-0.5 truncate font-mono text-[11px] text-muted-foreground/80">
-                  {ep.data.url}
-                </p>
-                {ep.data.last_delivery_at && (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                    last delivery {new Date(ep.data.last_delivery_at).toLocaleString()}
-                  </p>
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+        {list.length === 0 ? (
+          <EmptyState
+            className="py-10"
+            title="No endpoints"
+            description="POST scored mentions anywhere — Zapier, Discord, your backend."
+          />
+        ) : (
+          list.map((ep) => {
+            const active = !!ep.data.is_active
+            const failing = (ep.data.failure_count ?? 0) > 0
+            return (
+              <div
+                key={ep.recordId}
+                data-testid="endpoint-row"
+                className={cn(
+                  'group grid grid-cols-[1fr_110px_54px_34px] items-center gap-3.5 border-b border-border px-[18px] py-[13px] transition-colors last:border-b-0 hover:bg-[#fafbfc]',
+                  !active && 'opacity-60',
                 )}
+              >
+                <div className="min-w-0">
+                  <div className="truncate font-mono text-[12px] text-foreground">{ep.data.url}</div>
+                  <div className="truncate text-[11.5px] text-tertiary">
+                    {ep.data.label || 'endpoint'}
+                    {ep.data.last_delivery_at &&
+                      ` · last delivery ${new Date(ep.data.last_delivery_at).toLocaleString()}`}
+                  </div>
+                </div>
+                <div
+                  className="flex items-center gap-1.5 text-[11.5px] font-semibold"
+                  style={{ color: failing ? '#d64b4b' : '#0f9d6b' }}
+                >
+                  <span
+                    className="h-1.5 w-1.5 rounded-full"
+                    style={{ background: failing ? '#e0645c' : '#10b981' }}
+                  />
+                  {failing ? 'Failing' : 'Healthy'}
+                </div>
+                <div className="flex justify-center">
+                  <Toggle
+                    on={active}
+                    label={active ? 'Pause endpoint' : 'Resume endpoint'}
+                    onClick={() => put(ep.recordId, { is_active: active ? 0 : 1 })}
+                  />
+                </div>
+                <div className="flex justify-center">
+                  <RowMenu
+                    active={active}
+                    onToggle={() => put(ep.recordId, { is_active: active ? 0 : 1 })}
+                    onEdit={() =>
+                      setEditing({
+                        recordId: ep.recordId,
+                        label: ep.data.label ?? '',
+                        url: ep.data.url,
+                        secret: ep.data.secret ?? '',
+                        filters: ep.data.filters ?? {},
+                      })
+                    }
+                    onDelete={() => setDeleting(ep.recordId)}
+                  />
+                </div>
               </div>
-              <RowActions
-                active={!!ep.data.is_active}
-                onToggle={() => put(ep.recordId, { is_active: ep.data.is_active ? 0 : 1 })}
-                onEdit={() =>
-                  setEditing({
-                    recordId: ep.recordId,
-                    label: ep.data.label ?? '',
-                    url: ep.data.url,
-                    secret: ep.data.secret ?? '',
-                    filters: ep.data.filters ?? {},
-                  })
-                }
-                onDelete={() => setDeleting(ep.recordId)}
-              />
-            </li>
-          ))}
-        </ul>
-      )}
+            )
+          })
+        )}
+      </div>
 
       <Modal open={editing !== null} onClose={() => setEditing(null)}>
         <Modal.Header onClose={() => setEditing(null)}>
@@ -544,7 +668,7 @@ function WebhooksSection() {
             <div>
               <FieldLabel>Label</FieldLabel>
               <Input
-                className="h-8 text-[13px]"
+                className="h-9 text-[13px]"
                 value={editing.label}
                 onChange={(e) => setEditing({ ...editing, label: e.target.value })}
                 placeholder="Zapier"
@@ -554,7 +678,7 @@ function WebhooksSection() {
               <FieldLabel>URL</FieldLabel>
               <Input
                 data-testid="endpoint-url"
-                className="h-8 font-mono text-[13px]"
+                className="h-9 font-mono text-[13px]"
                 value={editing.url}
                 onChange={(e) => setEditing({ ...editing, url: e.target.value })}
                 placeholder="https://example.com/webhooks/octolens"
@@ -563,12 +687,11 @@ function WebhooksSection() {
             <div>
               <FieldLabel>Signing secret</FieldLabel>
               <div className="flex gap-2">
-                <Input value={editing.secret} readOnly className="h-8 font-mono text-[11px]" />
+                <Input value={editing.secret} readOnly className="h-9 font-mono text-[11px]" />
                 <Button
                   type="button"
                   size="sm"
                   variant="secondary"
-                  className="h-8 text-[13px]"
                   onClick={() => setEditing({ ...editing, secret: newSecret() })}
                 >
                   Rotate
@@ -580,16 +703,10 @@ function WebhooksSection() {
               onChange={(m) => setEditing({ ...editing, filters: m })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <Button size="sm" variant="secondary" className="h-8 text-[13px]" onClick={() => setEditing(null)}>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                className="h-8 text-[13px]"
-                data-testid="save-endpoint"
-                onClick={save}
-                disabled={!editing.url.trim()}
-              >
+              <Button size="sm" data-testid="save-endpoint" onClick={save} disabled={!editing.url.trim()}>
                 Save
               </Button>
             </div>
@@ -605,8 +722,9 @@ function WebhooksSection() {
           setDeleting(null)
         }}
         title="Delete endpoint?"
+        confirmText="Delete"
       />
-    </Section>
+    </section>
   )
 }
 
@@ -649,12 +767,18 @@ function DigestsSection() {
     }
   }
 
+  const list = digests ?? []
+
   return (
-    <Section
-      label="Email digests"
-      description="A daily or weekly summary of matching mentions, in your inbox."
-      action={
-        canEdit && (
+    <section>
+      <div className="mb-2.5 flex items-center justify-between gap-3">
+        <div className="min-w-0">
+          <SectionLabel className="text-tertiary">Email digests</SectionLabel>
+          <p className="mt-0.5 text-[11.5px] text-tertiary">
+            A daily or weekly summary of matching mentions, in your inbox.
+          </p>
+        </div>
+        {canEdit && (
           <Button
             size="sm"
             className="h-7 px-2.5 text-xs"
@@ -672,67 +796,69 @@ function DigestsSection() {
           >
             Add digest
           </Button>
-        )
-      }
-    >
-      {(digests ?? []).length === 0 ? (
-        <EmptyState
-          className="py-10"
-          title="No digests"
-          description="Scheduled summaries keep the whole team in the loop without another dashboard."
-        />
-      ) : (
-        <ul className="divide-y divide-border">
-          {(digests ?? []).map((d) => (
-            <li
-              key={d.recordId}
-              data-testid="digest-row"
-              className={cn(
-                'group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-secondary/40',
-                !d.data.is_active && 'opacity-55',
-              )}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                  <span className="text-[13px] font-medium text-foreground">
+        )}
+      </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+        {list.length === 0 ? (
+          <EmptyState
+            className="py-10"
+            title="No digests"
+            description="Scheduled summaries keep the whole team in the loop without another dashboard."
+          />
+        ) : (
+          list.map((d) => {
+            const active = !!d.data.is_active
+            return (
+              <div
+                key={d.recordId}
+                data-testid="digest-row"
+                className={cn(
+                  'group grid grid-cols-[1fr_54px_34px] items-center gap-3.5 border-b border-border px-[18px] py-[13px] transition-colors last:border-b-0 hover:bg-[#fafbfc]',
+                  !active && 'opacity-60',
+                )}
+              >
+                <div className="min-w-0">
+                  <div className="truncate text-[13px] font-semibold text-foreground">
                     {d.data.target?.email}
-                  </span>
-                  <span className="font-mono text-[11px] text-muted-foreground">
+                  </div>
+                  <div className="truncate font-mono text-[11.5px] text-tertiary">
                     {d.data.schedule} at {d.data.time} ({d.data.timezone})
-                  </span>
-                  {!d.data.is_active && (
-                    <Badge variant="secondary" size="sm">
-                      paused
-                    </Badge>
+                    {d.data.last_sent_at &&
+                      ` · last sent ${new Date(d.data.last_sent_at).toLocaleString()}`}
+                  </div>
+                </div>
+                <div className="flex justify-center">
+                  <Toggle
+                    on={active}
+                    label={active ? 'Pause digest' : 'Resume digest'}
+                    onClick={() => put(d.recordId, { is_active: active ? 0 : 1 })}
+                  />
+                </div>
+                <div className="flex justify-center">
+                  {canEdit && (
+                    <RowMenu
+                      active={active}
+                      onToggle={() => put(d.recordId, { is_active: active ? 0 : 1 })}
+                      onEdit={() =>
+                        setEditing({
+                          recordId: d.recordId,
+                          schedule: d.data.schedule,
+                          time: d.data.time ?? '09:00',
+                          timezone: d.data.timezone ?? 'UTC',
+                          email: d.data.target?.email ?? '',
+                          filters: d.data.filters ?? {},
+                        })
+                      }
+                      onDelete={() => setDeleting(d.recordId)}
+                    />
                   )}
                 </div>
-                {d.data.last_sent_at && (
-                  <p className="mt-0.5 text-[11px] text-muted-foreground/70">
-                    last sent {new Date(d.data.last_sent_at).toLocaleString()}
-                  </p>
-                )}
               </div>
-              {canEdit && (
-                <RowActions
-                  active={!!d.data.is_active}
-                  onToggle={() => put(d.recordId, { is_active: d.data.is_active ? 0 : 1 })}
-                  onEdit={() =>
-                    setEditing({
-                      recordId: d.recordId,
-                      schedule: d.data.schedule,
-                      time: d.data.time ?? '09:00',
-                      timezone: d.data.timezone ?? 'UTC',
-                      email: d.data.target?.email ?? '',
-                      filters: d.data.filters ?? {},
-                    })
-                  }
-                  onDelete={() => setDeleting(d.recordId)}
-                />
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
+            )
+          })
+        )}
+      </div>
 
       <Modal open={editing !== null} onClose={() => setEditing(null)}>
         <Modal.Header onClose={() => setEditing(null)}>
@@ -744,7 +870,7 @@ function DigestsSection() {
               <FieldLabel>Email</FieldLabel>
               <Input
                 data-testid="digest-email"
-                className="h-8 text-[13px]"
+                className="h-9 text-[13px]"
                 value={editing.email}
                 onChange={(e) => setEditing({ ...editing, email: e.target.value })}
                 placeholder="team@company.com"
@@ -763,7 +889,7 @@ function DigestsSection() {
               <div>
                 <FieldLabel>Time (HH:MM)</FieldLabel>
                 <Input
-                  className="h-8 font-mono text-[13px]"
+                  className="h-9 font-mono text-[13px]"
                   value={editing.time}
                   onChange={(e) => setEditing({ ...editing, time: e.target.value })}
                   placeholder="09:00"
@@ -772,7 +898,7 @@ function DigestsSection() {
               <div>
                 <FieldLabel>Timezone</FieldLabel>
                 <Input
-                  className="h-8 font-mono text-[13px]"
+                  className="h-9 font-mono text-[13px]"
                   value={editing.timezone}
                   onChange={(e) => setEditing({ ...editing, timezone: e.target.value })}
                   placeholder="America/New_York"
@@ -784,16 +910,10 @@ function DigestsSection() {
               onChange={(m) => setEditing({ ...editing, filters: m })}
             />
             <div className="flex justify-end gap-2 pt-2">
-              <Button size="sm" variant="secondary" className="h-8 text-[13px]" onClick={() => setEditing(null)}>
+              <Button size="sm" variant="secondary" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button
-                size="sm"
-                className="h-8 text-[13px]"
-                data-testid="save-digest"
-                onClick={save}
-                disabled={!editing.email.trim()}
-              >
+              <Button size="sm" data-testid="save-digest" onClick={save} disabled={!editing.email.trim()}>
                 Save
               </Button>
             </div>
@@ -809,7 +929,8 @@ function DigestsSection() {
           setDeleting(null)
         }}
         title="Delete digest?"
+        confirmText="Delete"
       />
-    </Section>
+    </section>
   )
 }

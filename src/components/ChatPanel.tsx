@@ -22,6 +22,7 @@ import rehypeHighlight from 'rehype-highlight'
 import {
   AlertCircle,
   ArrowUp,
+  Bot,
   Check,
   ChevronDown,
   Copy,
@@ -616,7 +617,7 @@ export function ChatPanel({
         {messages.length === 0 ? (
           <EmptyState prompts={prompts} onPick={onPickPrompt} />
         ) : (
-          <div className={`mx-auto flex max-w-[44rem] flex-col ${turnGap}`}>
+          <div className={`mx-auto flex max-w-[764px] flex-col ${turnGap}`}>
             {messages.map((m) => (
               <MessageTurn
                 key={m.id}
@@ -632,7 +633,7 @@ export function ChatPanel({
       </div>
 
       {error && (
-        <div className={`mx-auto mb-2 w-full max-w-[44rem] ${outerPx}`} role="alert">
+        <div className={`mx-auto mb-2 w-full max-w-[764px] ${outerPx}`} role="alert">
           <div className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-destructive">
             <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
             <div className="flex-1 text-[13px] leading-relaxed">{error.message}</div>
@@ -647,15 +648,15 @@ export function ChatPanel({
         </div>
       )}
 
-      <div className={`shrink-0 border-t border-border/60 ${outerPx} pb-4 pt-3`}>
+      <div className={`shrink-0 ${outerPx} pb-4 pt-2`}>
         <form
           onSubmit={(e) => {
             e.preventDefault()
             submit()
           }}
-          className="mx-auto w-full max-w-[44rem]"
+          className="mx-auto w-full max-w-[764px]"
         >
-          <div className="relative rounded-2xl border border-border bg-background transition-colors focus-within:border-foreground/25 focus-within:ring-4 focus-within:ring-foreground/[0.04]">
+          <div className="relative rounded-[14px] border border-input bg-background shadow-[0_4px_20px_rgba(0,0,0,0.06)] transition-colors focus-within:border-primary/40 focus-within:ring-4 focus-within:ring-primary/[0.06]">
             <textarea
               ref={inputRef}
               rows={1}
@@ -684,7 +685,7 @@ export function ChatPanel({
                   type="button"
                   onClick={stop}
                   aria-label="Stop generating"
-                  className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-foreground text-background transition-opacity hover:opacity-90"
+                  className="pointer-events-auto inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-foreground text-background transition-opacity hover:opacity-90"
                 >
                   <Square className="h-3 w-3 fill-current" aria-hidden="true" />
                 </button>
@@ -693,7 +694,7 @@ export function ChatPanel({
                   type="submit"
                   disabled={!canSend}
                   aria-label="Send message"
-                  className="pointer-events-auto inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground transition-all hover:opacity-90 disabled:bg-muted disabled:text-muted-foreground/60 disabled:cursor-not-allowed"
+                  className="pointer-events-auto inline-flex h-[34px] w-[34px] items-center justify-center rounded-[10px] bg-primary text-primary-foreground transition-all hover:brightness-110 disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground/60"
                 >
                   <ArrowUp className="h-4 w-4" aria-hidden="true" />
                 </button>
@@ -742,7 +743,7 @@ function MessageTurn({ role, content, parts, isStreaming }: MessageTurnProps) {
   if (role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-[85%] rounded-2xl bg-muted px-4 py-2.5 leading-relaxed text-foreground whitespace-pre-wrap break-words">
+        <div className="max-w-[78%] whitespace-pre-wrap break-words rounded-[14px_14px_4px_14px] bg-primary px-[14px] py-[9px] leading-[1.5] text-primary-foreground">
           {content}
         </div>
       </div>
@@ -763,7 +764,11 @@ function MessageTurn({ role, content, parts, isStreaming }: MessageTurnProps) {
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex items-start gap-[11px]">
+      <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/[0.08]" aria-hidden>
+        <Bot className="h-[15px] w-[15px] text-primary" />
+      </span>
+      <div className="flex min-w-0 flex-1 flex-col gap-3">
       {orderedParts.map((p, i) => {
         if (p.type === 'text') {
           const text = (p as { text: string }).text
@@ -818,6 +823,7 @@ function MessageTurn({ role, content, parts, isStreaming }: MessageTurnProps) {
         return null
       })}
       {isStreaming && <LiveIndicator />}
+      </div>
     </div>
   )
 }
@@ -826,28 +832,29 @@ function MessageTurn({ role, content, parts, isStreaming }: MessageTurnProps) {
 
 function EmptyState({ prompts, onPick }: { prompts: string[]; onPick: (p: string) => void }) {
   return (
-    <div className="mx-auto flex h-full max-w-[28rem] flex-col items-start justify-center gap-4 px-2">
-      <div className="space-y-1">
-        <h2 className="text-[17px] font-medium tracking-tight text-foreground">
-          How can I help?
-        </h2>
-        <p className="text-[13px] leading-relaxed text-muted-foreground">
-          I can query records, list schemas, and inspect collections on your behalf.
-        </p>
-      </div>
-      <div className="flex flex-col gap-0.5 pt-2">
-        <div className="pb-1 text-[10.5px] font-medium tracking-[0.08em] uppercase text-muted-foreground">
-          Try
+    <div className="mx-auto flex h-full max-w-[520px] flex-col items-start justify-center gap-5 px-2">
+      <div className="flex items-start gap-[11px]">
+        <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-primary/[0.08]" aria-hidden>
+          <Bot className="h-[15px] w-[15px] text-primary" />
+        </span>
+        <div className="space-y-1">
+          <h2 className="text-[17px] font-semibold tracking-tight text-foreground">
+            Ask anything about your mentions
+          </h2>
+          <p className="text-[13px] leading-relaxed text-muted-foreground">
+            I read your live feed — sentiment, sources, buying intent, and more.
+          </p>
         </div>
+      </div>
+      <div className="flex flex-wrap gap-2 pl-[39px]">
         {prompts.map((p) => (
           <button
             key={p}
             type="button"
             onClick={() => onPick(p)}
-            className="group flex items-center gap-2 py-1 text-left text-[13px] text-muted-foreground transition-colors hover:text-foreground"
+            className="inline-flex h-[30px] items-center rounded-lg border border-input bg-background px-3 text-left text-[12px] text-muted-foreground transition-colors hover:border-primary/40 hover:text-foreground"
           >
-            <span className="h-px w-3 shrink-0 bg-border transition-colors group-hover:bg-muted-foreground" />
-            <span className="truncate">{p}</span>
+            {p}
           </button>
         ))}
       </div>

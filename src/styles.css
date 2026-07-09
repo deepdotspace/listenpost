@@ -39,6 +39,15 @@
   --color-ring: #818cf8;
   --radius: 0.5rem;
 
+  /* Fonts — Hanken Grotesk (UI) + JetBrains Mono (signal layer) */
+  --font-sans: 'Hanken Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  /* Extended surface + text tokens (generated here, themed per [data-theme]) */
+  --color-sidebar: #fbfbfc;
+  --color-panel: #f7f8fa;
+  --color-tertiary: #949aa4;
+
   /* Status colors — constant across all themes */
   --color-success: #10b981;
   --color-success-foreground: #ffffff;
@@ -163,13 +172,16 @@
   }
 
   body {
-    font-family: 'SF Pro Text', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans);
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
-    font-size: 14px;
+    font-size: 13px;
     color: var(--color-foreground);
   }
+
+  /* Tabular numerals for the signal layer (metrics, counts, times). */
+  .tabular-nums { font-variant-numeric: tabular-nums; }
 
   /* Scrollbar styling */
   ::-webkit-scrollbar {

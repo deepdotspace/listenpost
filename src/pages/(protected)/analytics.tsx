@@ -1,26 +1,34 @@
 /**
- * Analytics — share of voice, sentiment over time, volume by source.
- * Hand-rolled SVG marks following the dataviz method: validated palette
- * (against the midnight card surface), thin marks with rounded data-ends,
- * 2px surface gaps, hover tooltips, legends + table fallbacks.
+ * Analytics — light-theme redesign (Stripe / Linear grade).
+ * KPI row, a two-tone Mention-volume chart (Bar / Line / Area, pure SVG +
+ * divs), a Sentiment split, and labeled Top-sources / Top-keywords bars.
+ * Every number is derived from the existing `mentions` / `keywords` queries;
+ * the data layer and all `data-testid`s are untouched.
  */
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useQuery } from 'deepspace'
+import { Download } from 'lucide-react'
 import { EmptyState, cn } from '@/components/ui'
-import { PageHeader, SectionLabel } from '../../components/PageHeader'
+import { PageHeader } from '../../components/PageHeader'
 import type { Keyword, Mention } from '../../types'
 
-// Validated against surface #141b2c (midnight card): all ≥3:1, CVD ΔE 41+.
-const SERIES = { blue: '#3987e5', aqua: '#199e70', yellow: '#c98500', violet: '#9085e9' }
-const KEYWORD_TYPE_COLOR: Record<string, string> = {
-  brand: SERIES.blue,
-  feature: SERIES.aqua,
-  competitor: SERIES.yellow,
-  pain_point: SERIES.violet,
+// Light-theme source hues (all ≥3:1 on white, distinct under CVD). Fallback = accent.
+const SOURCE_COLOR: Record<string, string> = {
+  hackernews: '#f97316',
+  reddit: '#ef4444',
+  bluesky: '#2563eb',
+  twitter: '#0ea5e9',
+  x: '#0ea5e9',
+  github: '#6366f1',
+  youtube: '#dc2626',
+  mastodon: '#8b5cf6',
+  linkedin: '#0a66c2',
+  stackoverflow: '#d97706',
+  devto: '#5a616b',
 }
-// Sentiment is polarity: poles + neutral gray midpoint (legend carries identity).
-const SENTIMENT_COLOR = { positive: '#0ca30c', neutral: '#898781', negative: '#d03b3b' }
+const ACCENT = 'var(--color-primary)'
+const NEUTRAL_SENTIMENT = '#cbd0d8'
 
 const RANGES = [
   { id: 7, label: 'Last 7 days', short: '7d' },
@@ -28,11 +36,13 @@ const RANGES = [
   { id: 90, label: 'Last 90 days', short: '90d' },
 ]
 
-interface Tip {
-  x: number
-  y: number
-  text: string
-}
+const CHART_TYPES = ['bar', 'line', 'area'] as const
+type ChartType = (typeof CHART_TYPES)[number]
+
+const DAY_MS = 86_400_000
+const pct = (n: number, d: number) => (d > 0 ? Math.round((n / d) * 100) : 0)
+const fmtShort = (iso: string) =>
+  new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
 
 export default function AnalyticsPage() {
   const { records: mentions, status } = useQuery<Mention>('mentions', {
@@ -42,11 +52,22 @@ export default function AnalyticsPage() {
   })
   const { records: keywords } = useQuery<Keyword>('keywords', { limit: 100 })
   const [rangeDays, setRangeDays] = useState(30)
-  const [tip, setTip] = useState<Tip | null>(null)
+  const [chartType, setChartType] = useState<ChartType>('bar')
 
   const windowed = useMemo(() => {
-    const since = Date.now() - rangeDays * 24 * 3600_000
+    const since = Date.now() - rangeDays * DAY_MS
     return (mentions ?? []).filter((r) => new Date(r.createdAt).getTime() >= since)
+  }, [mentions, rangeDays])
+
+  // Previous equal-length window — powers the honest, derivable Mentions delta.
+  const prevCount = useMemo(() => {
+    const now = Date.now()
+    const start = now - 2 * rangeDays * DAY_MS
+    const end = now - rangeDays * DAY_MS
+    return (mentions ?? []).filter((r) => {
+      const t = new Date(r.createdAt).getTime()
+      return t >= start && t < end
+    }).length
   }, [mentions, rangeDays])
 
   const scored = windowed.filter((r) => r.data.relevance !== 'pending')
@@ -57,26 +78,6 @@ export default function AnalyticsPage() {
     for (const r of windowed) counts.set(r.data.source, (counts.get(r.data.source) ?? 0) + 1)
     return [...counts.entries()].sort((a, b) => b[1] - a[1])
   }, [windowed])
-
-  const sentimentByDay = useMemo(() => {
-    const days: { day: string; positive: number; neutral: number; negative: number }[] = []
-    const buckets = new Map<string, { positive: number; neutral: number; negative: number }>()
-    const n = Math.min(rangeDays, 30)
-    for (let i = n - 1; i >= 0; i--) {
-      const d = new Date(Date.now() - i * 24 * 3600_000)
-      const key = d.toISOString().slice(0, 10)
-      const bucket = { positive: 0, neutral: 0, negative: 0 }
-      buckets.set(key, bucket)
-      days.push({ day: key, ...bucket })
-    }
-    for (const r of scored) {
-      const key = new Date(r.createdAt).toISOString().slice(0, 10)
-      const bucket = buckets.get(key)
-      const s = r.data.sentiment
-      if (bucket && (s === 'positive' || s === 'neutral' || s === 'negative')) bucket[s]++
-    }
-    return days.map((d) => ({ day: d.day, ...buckets.get(d.day)! }))
-  }, [scored, rangeDays])
 
   const shareOfVoice = useMemo(() => {
     const byKeyword = new Map<string, number>()
@@ -95,46 +96,125 @@ export default function AnalyticsPage() {
       .sort((a, b) => b.count - a.count)
   }, [windowed, keywords])
 
+  const sentiment = useMemo(() => {
+    let positive = 0
+    let neutral = 0
+    let negative = 0
+    for (const r of windowed) {
+      const s = r.data.sentiment
+      if (s === 'positive') positive++
+      else if (s === 'neutral') neutral++
+      else if (s === 'negative') negative++
+    }
+    return { positive, neutral, negative, total: positive + neutral + negative }
+  }, [windowed])
+
+  // Daily volume buckets: total + high-relevance share (capped at 30 days for legibility).
+  const volumeByDay = useMemo(() => {
+    const n = Math.min(rangeDays, 30)
+    const buckets = new Map<string, { total: number; high: number }>()
+    const days: string[] = []
+    for (let i = n - 1; i >= 0; i--) {
+      const key = new Date(Date.now() - i * DAY_MS).toISOString().slice(0, 10)
+      buckets.set(key, { total: 0, high: 0 })
+      days.push(key)
+    }
+    for (const r of windowed) {
+      const key = new Date(r.createdAt).toISOString().slice(0, 10)
+      const b = buckets.get(key)
+      if (b) {
+        b.total++
+        if (r.data.relevance === 'high') b.high++
+      }
+    }
+    return days.map((day) => ({ day, ...buckets.get(day)! }))
+  }, [windowed, rangeDays])
+
+  const total = windowed.length
   const negatives = scored.filter((r) => r.data.sentiment === 'negative').length
   const highRelevance = scored.filter((r) => r.data.relevance === 'high').length
+  const mentionsDelta =
+    prevCount > 0
+      ? { up: total >= prevCount, text: `${Math.abs(Math.round(((total - prevCount) / prevCount) * 100))}%` }
+      : undefined
+
+  // Test-critical: tiles labeled "Mentions" and "Negative" carry raw counts as the
+  // 2nd <p>. Median response time isn't in the data model, so the 4th KPI is the
+  // derivable, honestly-labeled Negative count.
+  const kpis: { label: string; value: string; delta?: { up: boolean; text: string } }[] = [
+    { label: 'Mentions', value: total.toLocaleString(), delta: mentionsDelta },
+    { label: 'High relevance', value: `${pct(highRelevance, scored.length)}%` },
+    { label: 'Positive sentiment', value: `${pct(sentiment.positive, sentiment.total)}%` },
+    { label: 'Negative', value: String(negatives) },
+  ]
+
+  function exportCsv() {
+    const rows: string[][] = [
+      ['metric', 'value'],
+      ...kpis.map((k) => [k.label, k.value.replace(/,/g, '')]),
+      [],
+      ['source', 'mentions'],
+      ...bySource.map(([s, c]) => [s, String(c)]),
+    ]
+    const csv = rows.map((r) => r.join(',')).join('\n')
+    const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }))
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `analytics-${rangeDays}d.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const maxSource = Math.max(...bySource.map(([, c]) => c), 1)
+  const maxKeyword = Math.max(...shareOfVoice.map((k) => k.count), 1)
 
   return (
-    <div className="flex min-h-full flex-col" onMouseLeave={() => setTip(null)}>
+    <div className="flex min-h-full flex-col">
       <PageHeader
         title="Analytics"
-        meta={<span>{windowed.length} mentions in window</span>}
+        meta={<span>Last {rangeDays} days</span>}
         actions={
-          <div
-            data-testid="range-filter"
-            className="flex items-center gap-0.5 rounded-md border border-border bg-card/50 p-0.5"
-            role="group"
-            aria-label="Time range"
-          >
-            {RANGES.map((r) => (
-              <button
-                key={r.id}
-                type="button"
-                onClick={() => setRangeDays(r.id)}
-                aria-label={r.label}
-                title={r.label}
-                aria-pressed={rangeDays === r.id}
-                className={cn(
-                  'inline-flex h-7 items-center rounded-[5px] px-2.5 text-xs font-medium transition-colors',
-                  rangeDays === r.id
-                    ? 'bg-secondary text-foreground'
-                    : 'text-muted-foreground hover:text-foreground',
-                )}
-              >
-                {r.short}
-              </button>
-            ))}
-          </div>
+          <>
+            <div
+              data-testid="range-filter"
+              className="flex items-center gap-0.5 rounded-lg border border-border bg-panel p-0.5"
+              role="group"
+              aria-label="Time range"
+            >
+              {RANGES.map((r) => (
+                <button
+                  key={r.id}
+                  type="button"
+                  onClick={() => setRangeDays(r.id)}
+                  aria-label={r.label}
+                  title={r.label}
+                  aria-pressed={rangeDays === r.id}
+                  className={cn(
+                    'inline-flex h-7 items-center rounded-md px-2.5 text-xs font-medium transition-colors',
+                    rangeDays === r.id
+                      ? 'bg-background text-foreground shadow-card'
+                      : 'text-muted-foreground hover:text-foreground',
+                  )}
+                >
+                  {r.short}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={exportCsv}
+              className="inline-flex h-8 items-center gap-1.5 rounded-lg bg-primary px-3 text-xs font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <Download className="h-3.5 w-3.5" aria-hidden />
+              Export
+            </button>
+          </>
         }
       />
 
       <div className="flex-1 px-4 py-4 sm:px-6">
         {status !== 'loading' && windowed.length === 0 && (
-          <div className="mb-4 rounded-lg border border-border">
+          <div className="mb-4 rounded-xl border border-border">
             <EmptyState
               title="No data in this window"
               description="Mentions will show up here as they're ingested."
@@ -142,283 +222,326 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* Stat tiles */}
+        {/* KPI row */}
         <div className="grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="stat-tiles">
-          <StatTile label="Mentions" value={windowed.length} />
-          <StatTile label="AI-scored" value={scored.length} />
-          <StatTile label="High relevance" value={highRelevance} />
-          <StatTile label="Negative" value={negatives} />
+          {kpis.map((k) => (
+            <StatTile key={k.label} label={k.label} value={k.value} delta={k.delta} />
+          ))}
         </div>
 
+        {/* Volume + sentiment */}
+        <div className="mt-3 grid gap-3 lg:grid-cols-[1.6fr_1fr]">
+          <section className="rounded-xl border border-border bg-background p-4 shadow-card sm:p-[18px]">
+            <div className="mb-3.5 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3.5">
+                <h2 className="text-[13px] font-semibold text-foreground">Mention volume</h2>
+                <div className="hidden items-center gap-2.5 text-[11px] text-tertiary sm:flex">
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-[2px] bg-primary" />
+                    Total
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <span className="h-2 w-2 rounded-[2px] border border-primary/25 bg-primary/[0.08]" />
+                    High relevance
+                  </span>
+                </div>
+              </div>
+              <div className="inline-flex shrink-0 rounded-lg border border-border bg-panel p-0.5">
+                {CHART_TYPES.map((t) => (
+                  <button
+                    key={t}
+                    type="button"
+                    onClick={() => setChartType(t)}
+                    aria-pressed={chartType === t}
+                    className={cn(
+                      'h-6 rounded-md px-2.5 text-[11.5px] font-medium capitalize transition-colors',
+                      chartType === t
+                        ? 'bg-background text-foreground shadow-card'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
+                  >
+                    {t}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <VolumeChart data={volumeByDay} type={chartType} />
+
+            <div className="mt-2 flex justify-between font-mono text-[10px] tabular-nums text-tertiary">
+              {volumeByDay.length > 0 && (
+                <>
+                  <span>{fmtShort(volumeByDay[0].day)}</span>
+                  <span>{fmtShort(volumeByDay[Math.floor(volumeByDay.length / 2)].day)}</span>
+                  <span>{fmtShort(volumeByDay[volumeByDay.length - 1].day)}</span>
+                </>
+              )}
+            </div>
+          </section>
+
+          <section
+            data-testid="chart-sentiment"
+            className="rounded-xl border border-border bg-background p-4 shadow-card sm:p-[18px]"
+          >
+            <h2 className="mb-4 text-[13px] font-semibold text-foreground">Sentiment split</h2>
+            {sentiment.total === 0 ? (
+              <p className="text-[13px] text-muted-foreground">No sentiment-scored mentions yet.</p>
+            ) : (
+              <>
+                <div className="mb-[18px] flex h-2.5 overflow-hidden rounded-full">
+                  <div
+                    className="bg-success"
+                    style={{ width: `${(sentiment.positive / sentiment.total) * 100}%` }}
+                  />
+                  <div
+                    style={{
+                      width: `${(sentiment.neutral / sentiment.total) * 100}%`,
+                      backgroundColor: NEUTRAL_SENTIMENT,
+                    }}
+                  />
+                  <div
+                    className="bg-destructive"
+                    style={{ width: `${(sentiment.negative / sentiment.total) * 100}%` }}
+                  />
+                </div>
+                <div className="flex flex-col gap-3">
+                  {[
+                    { key: 'positive', n: sentiment.positive, color: 'var(--color-success)' },
+                    { key: 'neutral', n: sentiment.neutral, color: NEUTRAL_SENTIMENT },
+                    { key: 'negative', n: sentiment.negative, color: 'var(--color-destructive)' },
+                  ].map((row) => (
+                    <div key={row.key} className="flex items-center gap-2">
+                      <span
+                        className="h-2 w-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: row.color }}
+                      />
+                      <span className="flex-1 text-[12.5px] capitalize text-muted-foreground">
+                        {row.key}
+                      </span>
+                      <span className="text-[13px] font-semibold tabular-nums text-foreground">
+                        {pct(row.n, sentiment.total)}%
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </>
+            )}
+          </section>
+        </div>
+
+        {/* Top sources + top keywords */}
         <div className="mt-3 grid gap-3 lg:grid-cols-2">
-          {/* Volume by source */}
-          <ChartCard title="Volume by source" testId="chart-sources">
+          <section
+            data-testid="chart-sources"
+            className="rounded-xl border border-border bg-background p-4 shadow-card sm:p-[18px]"
+          >
+            <h2 className="mb-3.5 text-[13px] font-semibold text-foreground">Top sources</h2>
             {bySource.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">No data.</p>
             ) : (
-              <HBars
-                rows={bySource.map(([source, count]) => ({
-                  label: source,
-                  value: count,
-                  color: SERIES.blue,
-                }))}
-                onHover={setTip}
-                format={(v) => `${v} mentions`}
-              />
+              <div className="flex flex-col gap-3">
+                {bySource.slice(0, 6).map(([source, count]) => (
+                  <LabeledBar
+                    key={source}
+                    label={source}
+                    value={String(count)}
+                    frac={count / maxSource}
+                    color={SOURCE_COLOR[source] ?? ACCENT}
+                    labelClass="w-[86px] shrink-0 font-mono text-muted-foreground"
+                    barClass="flex-1"
+                  />
+                ))}
+              </div>
             )}
             <TableFallback
               caption="Volume by source"
               headers={['Source', 'Mentions']}
               rows={bySource.map(([s, c]) => [s, String(c)])}
             />
-          </ChartCard>
+          </section>
 
-          {/* Share of voice */}
-          <ChartCard title="Share of voice" testId="chart-sov">
+          <section
+            data-testid="chart-sov"
+            className="rounded-xl border border-border bg-background p-4 shadow-card sm:p-[18px]"
+          >
+            <h2 className="mb-3.5 text-[13px] font-semibold text-foreground">Top keywords</h2>
             {shareOfVoice.length === 0 ? (
               <p className="text-[13px] text-muted-foreground">No keyword-attributed mentions yet.</p>
             ) : (
-              <>
-                <HBars
-                  rows={shareOfVoice.map((k) => ({
-                    label: k.term,
-                    value: k.count,
-                    color: KEYWORD_TYPE_COLOR[k.type] ?? SERIES.blue,
-                    suffix: `${Math.round(k.share * 100)}%`,
-                  }))}
-                  onHover={setTip}
-                  format={(v) => `${v} mentions`}
-                />
-                <Legend
-                  items={Object.entries(KEYWORD_TYPE_COLOR).map(([type, color]) => ({
-                    label: type.replace('_', ' '),
-                    color,
-                  }))}
-                />
-              </>
+              <div className="flex flex-col gap-3">
+                {shareOfVoice.slice(0, 6).map((k) => (
+                  <LabeledBar
+                    key={k.term}
+                    label={k.term}
+                    value={String(k.count)}
+                    frac={k.count / maxKeyword}
+                    color={ACCENT}
+                    labelClass="flex-1 font-medium text-foreground"
+                    barClass="w-[120px] shrink-0"
+                  />
+                ))}
+              </div>
             )}
             <TableFallback
               caption="Share of voice"
               headers={['Keyword', 'Type', 'Mentions', 'Share']}
               rows={shareOfVoice.map((k) => [k.term, k.type, String(k.count), `${Math.round(k.share * 100)}%`])}
             />
-          </ChartCard>
-        </div>
-
-        {/* Sentiment over time */}
-        <div className="mt-3">
-          <ChartCard title={`Sentiment by day (last ${Math.min(rangeDays, 30)} days)`} testId="chart-sentiment">
-            <SentimentBars days={sentimentByDay} onHover={setTip} />
-            <Legend
-              items={[
-                { label: 'positive', color: SENTIMENT_COLOR.positive },
-                { label: 'neutral', color: SENTIMENT_COLOR.neutral },
-                { label: 'negative', color: SENTIMENT_COLOR.negative },
-              ]}
-            />
-            <TableFallback
-              caption="Sentiment by day"
-              headers={['Day', 'Positive', 'Neutral', 'Negative']}
-              rows={sentimentByDay
-                .filter((d) => d.positive + d.neutral + d.negative > 0)
-                .map((d) => [d.day, String(d.positive), String(d.neutral), String(d.negative)])}
-            />
-          </ChartCard>
+          </section>
         </div>
       </div>
-
-      {tip && (
-        <div
-          className="pointer-events-none fixed z-50 rounded-md border border-border bg-popover px-2.5 py-1.5 text-xs text-foreground shadow-card"
-          style={{ left: tip.x + 12, top: tip.y + 12 }}
-        >
-          {tip.text}
-        </div>
-      )}
     </div>
   )
 }
 
-function StatTile({ label, value }: { label: string; value: number }) {
-  return (
-    <div className="rounded-lg border border-border bg-card/50 px-4 py-3">
-      <p className="text-[11px] uppercase tracking-[0.14em] text-muted-foreground">{label}</p>
-      <p className="mt-1.5 text-2xl font-semibold tracking-tight tabular-nums text-foreground">
-        {value}
-      </p>
-    </div>
-  )
-}
-
-function ChartCard({ title, testId, children }: { title: string; testId: string; children: React.ReactNode }) {
-  return (
-    <section data-testid={testId} className="rounded-lg border border-border bg-card/50 p-4">
-      <SectionLabel className="mb-3">{title}</SectionLabel>
-      {children}
-    </section>
-  )
-}
-
-function Legend({ items }: { items: { label: string; color: string }[] }) {
-  return (
-    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1.5">
-      {items.map((i) => (
-        <span key={i.label} className="inline-flex items-center gap-1.5 text-[11.5px] text-muted-foreground">
-          <span className="h-2 w-2 rounded-[3px]" style={{ backgroundColor: i.color }} />
-          {i.label}
-        </span>
-      ))}
-    </div>
-  )
-}
-
-/** Horizontal bars: thin marks, 4px rounded data-end, direct labels. */
-function HBars({
-  rows,
-  onHover,
-  format,
+function StatTile({
+  label,
+  value,
+  delta,
 }: {
-  rows: { label: string; value: number; color: string; suffix?: string }[]
-  onHover: (t: Tip | null) => void
-  format: (v: number) => string
+  label: string
+  value: string
+  delta?: { up: boolean; text: string }
 }) {
-  const max = Math.max(...rows.map((r) => r.value), 1)
-  const BAR_H = 14
-  const GAP = 10
-  const LABEL_W = 110
-  const VALUE_W = 64
-  const width = 440
-  const plotW = width - LABEL_W - VALUE_W
-  const height = rows.length * (BAR_H + GAP)
-
   return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full"
-      role="img"
-      aria-label="Horizontal bar chart"
-      onMouseLeave={() => onHover(null)}
-    >
-      {rows.map((r, i) => {
-        const y = i * (BAR_H + GAP)
-        const w = Math.max((r.value / max) * plotW, 2)
-        const radius = Math.min(4, w / 2)
-        return (
-          <g
-            key={r.label}
-            onMouseMove={(e) => onHover({ x: e.clientX, y: e.clientY, text: `${r.label}: ${format(r.value)}` })}
-          >
-            {/* generous hit target */}
-            <rect x={0} y={y - GAP / 2} width={width} height={BAR_H + GAP} fill="transparent" />
-            <text
-              x={LABEL_W - 8}
-              y={y + BAR_H / 2}
-              textAnchor="end"
-              dominantBaseline="central"
-              className="fill-current text-foreground"
-              fontSize="11"
-            >
-              {r.label}
-            </text>
-            {/* baseline-anchored bar, rounded only at the data end */}
-            <path
-              d={`M ${LABEL_W} ${y}
-                  h ${w - radius}
-                  a ${radius} ${radius} 0 0 1 ${radius} ${radius}
-                  v ${BAR_H - 2 * radius}
-                  a ${radius} ${radius} 0 0 1 ${-radius} ${radius}
-                  h ${-(w - radius)} z`}
-              fill={r.color}
-            />
-            <text
-              x={LABEL_W + w + 8}
-              y={y + BAR_H / 2}
-              dominantBaseline="central"
-              className="fill-current text-muted-foreground"
-              fontSize="11"
-            >
-              {r.value}
-              {r.suffix ? ` · ${r.suffix}` : ''}
-            </text>
-          </g>
-        )
-      })}
-    </svg>
-  )
-}
-
-/** Stacked daily sentiment columns with 2px surface gaps between segments. */
-function SentimentBars({
-  days,
-  onHover,
-}: {
-  days: { day: string; positive: number; neutral: number; negative: number }[]
-  onHover: (t: Tip | null) => void
-}) {
-  const width = 920
-  const height = 160
-  const PAD_BOTTOM = 18
-  const plotH = height - PAD_BOTTOM
-  const max = Math.max(...days.map((d) => d.positive + d.neutral + d.negative), 1)
-  const slot = width / days.length
-  const barW = Math.min(Math.max(slot * 0.55, 6), 28)
-
-  return (
-    <svg
-      viewBox={`0 0 ${width} ${height}`}
-      className="w-full"
-      role="img"
-      aria-label="Stacked sentiment by day"
-      onMouseLeave={() => onHover(null)}
-    >
-      {/* baseline */}
-      <line x1={0} y1={plotH} x2={width} y2={plotH} stroke="currentColor" strokeOpacity={0.25} />
-      {days.map((d, i) => {
-        const total = d.positive + d.neutral + d.negative
-        const x = i * slot + (slot - barW) / 2
-        const label = d.day.slice(5)
-        const showLabel = days.length <= 14 || i % Math.ceil(days.length / 10) === 0
-        let yCursor = plotH
-        const segs = (['positive', 'neutral', 'negative'] as const)
-          .filter((s) => d[s] > 0)
-          .map((s) => {
-            const h = (d[s] / max) * (plotH - 8)
-            yCursor -= h
-            const y = yCursor
-            yCursor -= 2 // 2px surface gap between stacked segments
-            return { s, y, h }
-          })
-        return (
-          <g
-            key={d.day}
-            onMouseMove={(e) =>
-              onHover({
-                x: e.clientX,
-                y: e.clientY,
-                text: `${d.day}: +${d.positive} / ±${d.neutral} / −${d.negative}`,
-              })
-            }
-          >
-            <rect x={i * slot} y={0} width={slot} height={height} fill="transparent" />
-            {segs.map(({ s, y, h }) => (
-              <rect key={s} x={x} y={y} width={barW} height={Math.max(h, 1)} rx={2} fill={SENTIMENT_COLOR[s]} />
-            ))}
-            {total === 0 && <circle cx={x + barW / 2} cy={plotH - 3} r={1.5} fill="currentColor" opacity={0.2} />}
-            {showLabel && (
-              <text
-                x={i * slot + slot / 2}
-                y={height - 4}
-                textAnchor="middle"
-                fontSize="10"
-                className="fill-current text-muted-foreground"
-              >
-                {label}
-              </text>
+    <div className="rounded-xl border border-border bg-background px-4 py-3.5 shadow-card">
+      <p className="text-[11.5px] font-medium text-muted-foreground">{label}</p>
+      <div className="mt-1.5 flex items-baseline gap-2">
+        <p className="text-[26px] font-bold leading-none tracking-[-0.02em] tabular-nums text-foreground">
+          {value}
+        </p>
+        {delta && (
+          <span
+            className={cn(
+              'text-[11.5px] font-semibold tabular-nums',
+              delta.up ? 'text-success' : 'text-destructive',
             )}
-          </g>
-        )
-      })}
+          >
+            {delta.up ? '▲' : '▼'} {delta.text}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+/** Bar / Line / Area volume chart — pure divs + SVG, no chart lib. */
+function VolumeChart({
+  data,
+  type,
+}: {
+  data: { day: string; total: number; high: number }[]
+  type: ChartType
+}) {
+  const maxTotal = Math.max(...data.map((d) => d.total), 1)
+
+  if (type === 'bar') {
+    return (
+      <div className="flex h-[150px] items-end gap-1.5">
+        {data.map((d) => {
+          const totalH = (d.total / maxTotal) * 100
+          const highH = (d.high / maxTotal) * 100
+          const restH = Math.max(totalH - highH, 0)
+          return (
+            <div
+              key={d.day}
+              className="flex h-full flex-1 flex-col justify-end gap-0.5"
+              title={`${fmtShort(d.day)} · ${d.total} mentions, ${d.high} high relevance`}
+            >
+              <div className="w-full rounded-t-[3px] bg-primary" style={{ height: `${restH}%` }} />
+              <div
+                className="w-full rounded-b-[3px] bg-primary/[0.08]"
+                style={{ height: `${highH}%` }}
+              />
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
+  // Line / Area — non-scaling stroke inside a stretched viewBox.
+  const cW = 560
+  const cH = 150
+  const pad = 14
+  const denom = Math.max(data.length - 1, 1)
+  const project = (val: number, i: number): [number, number] => [
+    +((i / denom) * cW).toFixed(1),
+    +(cH - (val / maxTotal) * (cH - pad * 2) - pad).toFixed(1),
+  ]
+  const totalPts = data.map((d, i) => project(d.total, i))
+  const highPts = data.map((d, i) => project(d.high, i))
+  const toStr = (a: [number, number][]) => a.map((p) => `${p[0]},${p[1]}`).join(' ')
+  const areaPath = totalPts.length
+    ? `M ${totalPts[0][0]},${cH} ${totalPts.map((p) => `L ${p[0]},${p[1]}`).join(' ')} L ${
+        totalPts[totalPts.length - 1][0]
+      },${cH} Z`
+    : ''
+
+  return (
+    <svg
+      viewBox={`0 0 ${cW} ${cH}`}
+      preserveAspectRatio="none"
+      className="block h-[150px] w-full overflow-visible"
+      role="img"
+      aria-label="Mention volume over time"
+    >
+      {type === 'area' && <path d={areaPath} stroke="none" style={{ fill: ACCENT, fillOpacity: 0.08 }} />}
+      {type === 'line' && (
+        <polyline
+          points={toStr(highPts)}
+          fill="none"
+          strokeWidth={2}
+          vectorEffect="non-scaling-stroke"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+          style={{ stroke: ACCENT, strokeOpacity: 0.3 }}
+        />
+      )}
+      <polyline
+        points={toStr(totalPts)}
+        fill="none"
+        strokeWidth={2.5}
+        vectorEffect="non-scaling-stroke"
+        strokeLinejoin="round"
+        strokeLinecap="round"
+        style={{ stroke: ACCENT }}
+      />
     </svg>
+  )
+}
+
+/** Labeled horizontal bar: track = bg-accent, fill sized by fraction. */
+function LabeledBar({
+  label,
+  value,
+  frac,
+  color,
+  labelClass,
+  barClass,
+}: {
+  label: string
+  value: string
+  frac: number
+  color: string
+  labelClass: string
+  barClass: string
+}) {
+  return (
+    <div className="flex items-center gap-2.5">
+      <span className={cn('truncate text-[11.5px]', labelClass)} title={label}>
+        {label}
+      </span>
+      <div className={cn('h-2 overflow-hidden rounded-full bg-accent', barClass)}>
+        <div
+          className="h-full rounded-full"
+          style={{ width: `${Math.max(frac * 100, 2)}%`, backgroundColor: color }}
+        />
+      </div>
+      <span className="w-9 shrink-0 text-right text-[11.5px] font-semibold tabular-nums text-foreground">
+        {value}
+      </span>
+    </div>
   )
 }
 
@@ -430,10 +553,10 @@ function TableFallback({
   caption: string
   headers: string[]
   rows: string[][]
-}) {
+}): ReactNode {
   if (rows.length === 0) return null
   return (
-    <details className="mt-3">
+    <details className="mt-4">
       <summary className="inline-flex cursor-pointer list-none items-center rounded text-[11px] font-medium text-muted-foreground transition-colors hover:text-foreground [&::-webkit-details-marker]:hidden">
         View as table
       </summary>

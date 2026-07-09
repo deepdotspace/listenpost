@@ -13,15 +13,14 @@ import { useUser } from 'deepspace'
 import { useUsers } from 'deepspace'
 import { useQuery } from 'deepspace'
 import { useMutations } from 'deepspace'
-import { ShieldAlert, Trash2 } from 'lucide-react'
+import { ShieldAlert, Trash2, UserPlus, MoreVertical } from 'lucide-react'
 import {
   Button,
   Input,
-  Avatar,
-  AvatarFallback,
   ConfirmModal,
   EmptyState,
   Skeleton,
+  DropdownMenu,
   useToast,
   cn,
 } from '@/components/ui'
@@ -35,6 +34,54 @@ import { ROLE_CONFIG } from 'deepspace'
 interface Setting {
   key: string
   value: string
+}
+
+// ============================================================================
+// Presentation helpers
+// ============================================================================
+
+const ROLE_BADGE: Record<string, string> = {
+  admin: 'bg-primary/[0.08] text-primary',
+  member: 'bg-[#e7f2ff] text-[#2563eb]',
+  viewer: 'bg-[#f3f4f6] text-[#7a8290]',
+}
+
+const AVATAR_COLORS = ['#e0645c', '#4b8dd6', '#3fae82', '#b4761f', '#7c6cf0', '#d6699f']
+
+function avatarColor(seed: string): string {
+  let h = 0
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
+  return AVATAR_COLORS[h % AVATAR_COLORS.length]
+}
+
+function relTime(iso: string): string {
+  const ms = Date.now() - new Date(iso).getTime()
+  if (Number.isNaN(ms)) return '—'
+  const min = Math.floor(ms / 60000)
+  if (min < 2) return 'Active now'
+  if (min < 60) return `${min}m ago`
+  const hr = Math.floor(min / 60)
+  if (hr < 24) return `${hr}h ago`
+  const days = Math.floor(hr / 24)
+  if (days < 30) return `${days}d ago`
+  return new Date(iso).toLocaleDateString()
+}
+
+function roleTitle(role: string): string {
+  const cfg = (ROLE_CONFIG as Record<string, { title: string }>)[role]
+  return cfg?.title ?? role
+}
+
+function StatCard({ label, value, suffix }: { label: string; value: string; suffix?: string }) {
+  return (
+    <div className="rounded-xl border border-border bg-card px-4 py-3.5 shadow-card">
+      <div className="text-[11.5px] text-muted-foreground">{label}</div>
+      <div className="mt-1 text-[24px] font-bold tracking-tight tabular-nums text-foreground">
+        {value}
+        {suffix && <span className="text-[14px] font-medium text-tertiary"> {suffix}</span>}
+      </div>
+    </div>
+  )
 }
 
 // ============================================================================
@@ -52,8 +99,8 @@ export default function AdminPage() {
     return (
       <div className="flex min-h-full flex-col">
         <PageHeader title="Admin" />
-        <div className="flex-1 px-4 py-4 sm:px-6">
-          <div className="mx-auto max-w-3xl rounded-lg border border-border">
+        <div className="flex-1 px-4 py-5 sm:px-5">
+          <div className="mx-auto max-w-3xl rounded-xl border border-border shadow-card">
             <EmptyState
               icon={<ShieldAlert aria-hidden />}
               title="Access denied"
@@ -65,17 +112,47 @@ export default function AdminPage() {
     )
   }
 
+  const adminCount = users.filter((u) => u.role === 'admin').length
+  const activeToday = users.filter((u) => {
+    const ms = Date.now() - new Date(u.lastSeenAt).getTime()
+    return !Number.isNaN(ms) && ms < 24 * 60 * 60 * 1000
+  }).length
+
   return (
     <div className="flex min-h-full flex-col">
       <PageHeader
         title="Admin"
-        meta={<span>{users.length} {users.length === 1 ? 'user' : 'users'}</span>}
+        meta={
+          <span>
+            {users.length} {users.length === 1 ? 'member' : 'members'}
+          </span>
+        }
+        actions={
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
+            onClick={() =>
+              toast.success('Invite teammates', 'Share the app link — new sign-ins join as members.')
+            }
+          >
+            <UserPlus aria-hidden />
+            Invite
+          </Button>
+        }
       />
 
-      <div className="flex-1 px-4 py-4 sm:px-6">
-        <div className="mx-auto max-w-3xl space-y-6">
-          <section className="space-y-2">
-            <SectionLabel>Users</SectionLabel>
+      <div className="flex-1 px-4 py-5 sm:px-5">
+        <div className="space-y-5">
+          {/* Usage stats — derived from real data. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <StatCard label="Members" value={String(users.length)} />
+            <StatCard label="Admins" value={String(adminCount)} />
+            <StatCard label="Active today" value={String(activeToday)} />
+          </div>
+
+          {/* Members */}
+          <section>
+            <SectionLabel className="mb-2.5 text-tertiary">Members</SectionLabel>
             <UsersPanel
               users={users}
               currentUserId={user?.id}
@@ -86,8 +163,9 @@ export default function AdminPage() {
             />
           </section>
 
-          <section className="space-y-2">
-            <SectionLabel>App settings</SectionLabel>
+          {/* App settings */}
+          <section>
+            <SectionLabel className="mb-2.5 text-tertiary">App settings</SectionLabel>
             <SettingsPanel toast={toast} />
           </section>
         </div>
@@ -123,63 +201,100 @@ function UsersPanel({ users, currentUserId, onSetRole }: UsersPanelProps) {
 
   if (users.length === 0) {
     return (
-      <div className="rounded-lg border border-border">
+      <div className="rounded-xl border border-border shadow-card">
         <EmptyState title="No users found" />
       </div>
     )
   }
 
   return (
-    <div className="divide-y divide-border rounded-lg border border-border bg-card/50">
-      {sortedUsers.map(user => {
-        const isCurrentUser = user.id === currentUserId
+    <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+      <div className="overflow-x-auto">
+        <div className="min-w-[620px]">
+          <div className="grid grid-cols-[1.4fr_1fr_110px_110px_34px] items-center gap-3.5 border-b border-border px-[18px] py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-tertiary">
+            <span>Member</span>
+            <span>Email</span>
+            <span>Role</span>
+            <span>Last active</span>
+            <span />
+          </div>
 
-        return (
-          <div key={user.id} className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 px-4 py-3">
-            <div className="flex min-w-0 items-center gap-2.5">
-              <Avatar className="size-6">
-                <AvatarFallback className="text-[10px]">
-                  {user.name?.[0]?.toUpperCase() ?? '?'}
-                </AvatarFallback>
-              </Avatar>
-              <div className="min-w-0">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="truncate text-[13px] font-medium text-foreground">{user.name}</span>
-                  {isCurrentUser && (
-                    <span className="text-[11px] text-muted-foreground">(you)</span>
-                  )}
+          {sortedUsers.map((u) => {
+            const isCurrentUser = u.id === currentUserId
+            const initial = u.name?.[0]?.toUpperCase() ?? '?'
+            return (
+              <div
+                key={u.id}
+                className="group grid grid-cols-[1.4fr_1fr_110px_110px_34px] items-center gap-3.5 border-b border-border px-[18px] py-3 transition-colors last:border-b-0 hover:bg-[#fafbfc]"
+              >
+                <div className="flex min-w-0 items-center gap-2.5">
+                  <span
+                    aria-hidden
+                    className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
+                    style={{ background: avatarColor(u.id || u.name || initial) }}
+                  >
+                    {initial}
+                  </span>
+                  <span className="flex min-w-0 items-baseline gap-1.5">
+                    <span className="truncate text-[13px] font-semibold text-foreground">{u.name}</span>
+                    {isCurrentUser && <span className="text-[11px] text-tertiary">(you)</span>}
+                  </span>
                 </div>
-                <p className="truncate text-[11.5px] text-muted-foreground">{user.email}</p>
-              </div>
-            </div>
 
-            <div className="flex shrink-0 items-center gap-3">
-              <span className="hidden font-mono text-[11px] text-muted-foreground/80 sm:inline">
-                last seen {new Date(user.lastSeenAt).toLocaleDateString()}
-              </span>
+                <div className="truncate text-[12.5px] text-muted-foreground">{u.email}</div>
 
-              <div className="flex items-center gap-0.5 rounded-md border border-border p-0.5">
-                {Object.entries(ROLE_CONFIG).map(([role, config]) => (
-                  <button
-                    key={role}
-                    type="button"
-                    disabled={isCurrentUser}
-                    onClick={() => role !== user.role && onSetRole(user.id, role)}
+                <div>
+                  <span
                     className={cn(
-                      'rounded px-2 py-0.5 text-[11px] font-medium transition-colors disabled:opacity-50',
-                      role === user.role
-                        ? 'bg-primary text-primary-foreground'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                      'inline-flex h-5 items-center rounded-md px-2 text-[10.5px] font-semibold',
+                      ROLE_BADGE[u.role] ?? ROLE_BADGE.viewer,
                     )}
                   >
-                    {config.title}
-                  </button>
-                ))}
+                    {roleTitle(u.role)}
+                  </span>
+                </div>
+
+                <div className="text-[12px] text-tertiary">{relTime(u.lastSeenAt)}</div>
+
+                <div className="flex justify-center">
+                  {isCurrentUser ? (
+                    <button
+                      type="button"
+                      disabled
+                      aria-label="You can't change your own role"
+                      className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-tertiary opacity-40 [&_svg]:size-[15px]"
+                    >
+                      <MoreVertical aria-hidden />
+                    </button>
+                  ) : (
+                    <DropdownMenu>
+                      <DropdownMenu.Trigger
+                        chevron={false}
+                        aria-label="Member actions"
+                        className="h-[26px] w-[26px] justify-center border-transparent px-0 text-tertiary hover:bg-secondary hover:text-foreground [&_svg]:size-[15px]"
+                      >
+                        <MoreVertical aria-hidden />
+                      </DropdownMenu.Trigger>
+                      <DropdownMenu.Content align="end">
+                        <DropdownMenu.Label>Change role</DropdownMenu.Label>
+                        {Object.keys(ROLE_CONFIG).map((role) => (
+                          <DropdownMenu.Item
+                            key={role}
+                            selected={role === u.role}
+                            onClick={() => role !== u.role && onSetRole(u.id, role)}
+                          >
+                            {roleTitle(role)}
+                          </DropdownMenu.Item>
+                        ))}
+                      </DropdownMenu.Content>
+                    </DropdownMenu>
+                  )}
+                </div>
               </div>
-            </div>
-          </div>
-        )
-      })}
+            )
+          })}
+        </div>
+      </div>
     </div>
   )
 }
@@ -211,9 +326,9 @@ function SettingsPanel({ toast }: SettingsPanelProps) {
   }
 
   return (
-    <div className="space-y-2">
+    <div className="space-y-2.5">
       {/* Add new setting */}
-      <div className="rounded-lg border border-border bg-card/50 p-3">
+      <div className="rounded-xl border border-border bg-card p-3 shadow-card">
         <div className="flex gap-2">
           <Input
             value={newKey}
@@ -227,7 +342,7 @@ function SettingsPanel({ toast }: SettingsPanelProps) {
             placeholder="Value"
             className="h-9 text-[13px]"
           />
-          <Button size="sm" onClick={handleCreate} disabled={!newKey.trim() || !newValue.trim()}>
+          <Button size="sm" className="h-9" onClick={handleCreate} disabled={!newKey.trim() || !newValue.trim()}>
             Add
           </Button>
         </div>
@@ -235,23 +350,26 @@ function SettingsPanel({ toast }: SettingsPanelProps) {
 
       {/* Settings list */}
       {status === 'loading' ? (
-        <div className="space-y-3 rounded-lg border border-border p-4">
+        <div className="space-y-3 rounded-xl border border-border p-4">
           <Skeleton className="h-4 w-1/2" />
           <Skeleton className="h-4 w-1/3" />
         </div>
       ) : settings.length === 0 ? (
-        <div className="rounded-lg border border-border">
+        <div className="rounded-xl border border-border shadow-card">
           <EmptyState title="No settings configured" />
         </div>
       ) : (
-        <div className="divide-y divide-border rounded-lg border border-border bg-card/50">
-          {settings.map(setting => (
-            <div key={setting.recordId} className="flex items-center justify-between gap-3 px-4 py-2.5">
+        <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+          {settings.map((setting) => (
+            <div
+              key={setting.recordId}
+              className="flex items-center justify-between gap-3 border-b border-border px-[18px] py-2.5 last:border-b-0"
+            >
               <div className="flex min-w-0 items-baseline gap-2">
-                <code className="rounded bg-muted px-1.5 py-0.5 font-mono text-[11px] text-primary">
+                <code className="rounded bg-accent px-1.5 py-0.5 font-mono text-[11px] text-primary">
                   {setting.data.key}
                 </code>
-                <span className="text-[11.5px] text-muted-foreground">=</span>
+                <span className="text-[11.5px] text-tertiary">=</span>
                 <span className="truncate text-[13px] text-foreground">{setting.data.value}</span>
               </div>
               <Button
@@ -259,7 +377,7 @@ function SettingsPanel({ toast }: SettingsPanelProps) {
                 variant="ghost"
                 aria-label={`Delete setting ${setting.data.key}`}
                 onClick={() => setDeleting(setting.recordId)}
-                className="h-7 w-7 p-0 text-muted-foreground hover:bg-destructive/10 hover:text-destructive [&_svg]:size-3.5"
+                className="h-7 w-7 p-0 text-tertiary hover:bg-destructive/10 hover:text-destructive [&_svg]:size-3.5"
               >
                 <Trash2 aria-hidden />
               </Button>

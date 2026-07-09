@@ -35,6 +35,15 @@ test.describe('Local UX audit', () => {
       await page.screenshot({ path: `${OUT}/desktop-${p.name}.png`, fullPage: true })
     }
 
+    // Mentions alternate layouts (Feed / Board).
+    await page.goto('/mentions', { waitUntil: 'domcontentloaded' })
+    await page.waitForTimeout(2500)
+    for (const layout of ['Feed', 'Board'] as const) {
+      await page.getByRole('button', { name: layout, exact: true }).click()
+      await page.waitForTimeout(800)
+      await page.screenshot({ path: `${OUT}/desktop-mentions-${layout.toLowerCase()}.png`, fullPage: true })
+    }
+
     await page.setViewportSize({ width: 390, height: 844 })
     for (const name of ['mentions', 'keywords']) {
       await page.goto(`/${name}`, { waitUntil: 'domcontentloaded' })

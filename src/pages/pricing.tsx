@@ -55,33 +55,35 @@ export default function PricingPage() {
               <div
                 key={slug}
                 className={cn(
-                  'flex flex-col rounded-lg border bg-card/50 p-4',
-                  highlighted ? 'border-primary/40' : 'border-border',
+                  'flex flex-col rounded-[14px] bg-card p-[22px] transition-colors',
+                  highlighted
+                    ? 'border-[1.5px] border-primary/25 shadow-[0_10px_30px_-14px_rgba(79,70,229,0.33)]'
+                    : 'border border-border hover:border-input',
                 )}
               >
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-foreground">{plan.name}</p>
+                  <p className="text-[15px] font-bold text-foreground">{plan.name}</p>
                   {highlighted && (
-                    <span className="rounded border border-primary/40 bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-[0.12em] text-primary">
+                    <span className="rounded-md border border-primary/25 bg-primary/[0.08] px-[7px] py-0.5 font-mono text-[9.5px] font-semibold uppercase tracking-[0.1em] text-primary">
                       Recommended
                     </span>
                   )}
                 </div>
 
-                <p className="mt-2 flex items-baseline gap-1">
-                  <span className="text-3xl font-semibold tracking-tight text-foreground">
+                <p className="mt-3.5 flex items-baseline gap-[5px]">
+                  <span className="text-[36px] font-bold tracking-[-0.03em] tabular-nums text-foreground">
                     ${Math.round(plan.priceCents / 100)}
                   </span>
-                  <span className="text-[11.5px] text-muted-foreground">/ month</span>
+                  <span className="text-[12px] text-tertiary">/ month</span>
                 </p>
 
-                <p className="mt-1.5 text-[13px] leading-relaxed text-muted-foreground">
+                <p className="mt-2 text-[13px] leading-[1.5] text-muted-foreground">
                   {blurb}
                 </p>
 
-                <ul className="mt-3 space-y-1 border-t border-border pt-3 text-[13px] text-muted-foreground">
+                <ul className="mt-4 space-y-2 border-t border-border pt-4 text-[13px] text-muted-foreground">
                   <li>
-                    <span className="font-medium text-foreground">
+                    <span className="font-semibold tabular-nums text-foreground">
                       {PLAN_QUOTAS[slug].toLocaleString()}
                     </span>{' '}
                     mentions / month
@@ -90,7 +92,7 @@ export default function PricingPage() {
                     {OVERAGE_PER_MENTION_CENTS[slug] > 0 ? (
                       <>
                         then{' '}
-                        <span className="font-medium text-foreground">
+                        <span className="font-semibold tabular-nums text-foreground">
                           ${(OVERAGE_PER_MENTION_CENTS[slug] / 100).toFixed(3)}
                         </span>{' '}
                         per extra mention
@@ -101,9 +103,9 @@ export default function PricingPage() {
                   </li>
                 </ul>
 
-                <div className="mt-4 flex flex-1 items-end">
+                <div className="mt-5 flex flex-1 items-end">
                   {isCurrent ? (
-                    <span className="inline-flex h-8 w-full items-center justify-center rounded-md border border-border text-[13px] font-medium text-muted-foreground">
+                    <span className="inline-flex h-[38px] w-full items-center justify-center rounded-[9px] border border-input text-[13px] font-medium text-muted-foreground">
                       Current plan
                     </span>
                   ) : (
@@ -111,10 +113,10 @@ export default function PricingPage() {
                       type="button"
                       onClick={() => selectPlan(slug)}
                       className={cn(
-                        'inline-flex h-8 w-full items-center justify-center rounded-md text-[13px] font-medium transition-colors',
+                        'inline-flex h-[38px] w-full items-center justify-center rounded-[9px] text-[13px] font-semibold transition-colors',
                         highlighted
-                          ? 'bg-primary text-primary-foreground hover:opacity-90'
-                          : 'border border-border text-foreground hover:bg-secondary',
+                          ? 'bg-primary text-primary-foreground hover:brightness-110'
+                          : 'border border-input text-foreground hover:bg-secondary',
                       )}
                     >
                       {slug === 'free' ? 'Start trial' : `Select ${plan.name}`}
