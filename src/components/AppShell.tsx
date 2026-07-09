@@ -7,12 +7,13 @@
  * and identity only.
  */
 
-import { useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
-import { AuthOverlay, useAuthProfileReady, signOut } from 'deepspace'
+import { AuthOverlay, useAuthProfileReady, signOut, useQuery, useSubscription } from 'deepspace'
 import { ArrowUpRight, LogOut, Menu, Radar, X } from 'lucide-react'
 import { ROLE_CONFIG, type Role } from '../constants'
 import { navGroups } from '../nav'
+import { PLAN_QUOTAS, subscriptionPlans, type SubscriptionPlanSlug } from '../subscriptions'
 import { cn } from '../lib/utils'
 
 export default function AppShell({ children }: { children: ReactNode }) {
@@ -23,6 +24,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
 
   const profileReady = !isSignedIn || (!userLoading && !!user)
   const userRole = (user?.role ?? 'anonymous') as Role | 'anonymous'
+
+  // Live counts for the Mentions nav badge + usage card. Fetched only when
+  // signed in (a signed-out `mentions` query 401s and pollutes the console).
+  const [counts, setCounts] = useState({ newCount: 0, used: 0 })
 
   useEffect(() => setDrawerOpen(false), [location.pathname])
 
@@ -40,21 +45,27 @@ export default function AppShell({ children }: { children: ReactNode }) {
     .filter((g) => g.items.length > 0)
 
   const sidebar = (
-    <div className="flex h-full flex-col">
+    <div className="flex h-full flex-col bg-sidebar">
       {/* Brand */}
-      <Link to="/mentions" className="flex h-14 shrink-0 items-center gap-2.5 px-4">
-        <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-primary/15 ring-1 ring-inset ring-primary/25">
-          <Radar className="h-4 w-4 text-primary" aria-hidden />
+      <Link
+        to="/mentions"
+        className="flex h-14 shrink-0 items-center gap-2.5 border-b border-border px-4"
+      >
+        <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-primary">
+          <Radar className="h-[15px] w-[15px] text-primary-foreground" aria-hidden />
         </span>
-        <span className="text-[15px] font-semibold tracking-tight text-foreground">Octolens</span>
+        <span className="text-[15px] font-bold tracking-tight text-foreground">Octolens</span>
+        <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-medium text-tertiary">
+          v2
+        </span>
       </Link>
 
       {/* Nav groups */}
-      <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-4 pt-2">
+      <nav className="flex-1 space-y-5 overflow-y-auto px-2.5 pb-4 pt-3">
         {groups.map((g) => (
           <div key={g.label ?? 'top'}>
             {g.label && (
-              <div className="px-2 pb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted-foreground/70">
+              <div className="px-2 pb-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-tertiary">
                 {g.label}
               </div>
             )}
@@ -62,26 +73,39 @@ export default function AppShell({ children }: { children: ReactNode }) {
               {g.items.map((item) => {
                 const active = location.pathname.startsWith(item.path)
                 const Icon = item.icon
+                const badge = item.path === '/mentions' && counts.newCount > 0 ? counts.newCount : null
                 return (
                   <Link
                     key={item.path}
                     to={item.path}
                     aria-current={active ? 'page' : undefined}
                     className={cn(
-                      'group flex items-center gap-2.5 rounded-md px-2 py-1.5 text-[13px] font-medium transition-colors',
+                      'group flex items-center gap-2.5 rounded-[7px] px-2 py-[7px] text-[13px] transition-colors',
                       active
-                        ? 'bg-accent text-foreground'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground',
+                        ? 'bg-primary/[0.08] font-semibold text-primary'
+                        : 'font-medium text-muted-foreground hover:bg-secondary hover:text-foreground',
                     )}
                   >
                     <Icon
                       className={cn(
                         'h-4 w-4 shrink-0 transition-colors',
-                        active ? 'text-primary' : 'text-muted-foreground/70 group-hover:text-muted-foreground',
+                        active ? 'text-primary' : 'text-tertiary group-hover:text-muted-foreground',
                       )}
                       aria-hidden
                     />
                     {item.label}
+                    {badge != null && (
+                      <span
+                        className={cn(
+                          'ml-auto inline-flex min-w-[18px] items-center justify-center rounded-full px-1.5 py-0.5 text-[10px] font-semibold tabular-nums',
+                          active
+                            ? 'bg-primary text-primary-foreground'
+                            : 'bg-accent text-muted-foreground',
+                        )}
+                      >
+                        {badge}
+                      </span>
+                    )}
                   </Link>
                 )
               })}
@@ -90,15 +114,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
         ))}
       </nav>
 
-      {/* Footer: upgrade + identity */}
-      <div className="shrink-0 space-y-2 border-t border-border p-2.5">
-        <Link
-          to="/pricing"
-          className="flex items-center justify-between rounded-md px-2 py-1.5 text-[13px] font-medium text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-        >
-          <span>Plans &amp; usage</span>
-          <ArrowUpRight className="h-3.5 w-3.5 opacity-60" aria-hidden />
-        </Link>
+      {/* Footer: usage card + identity */}
+      <div className="shrink-0 space-y-2.5 border-t border-border p-2.5">
+        {isSignedIn && profileReady && <SidebarData onCounts={setCounts} />}
         <UserRow
           isLoaded={isLoaded}
           isSignedIn={!!isSignedIn}
@@ -116,7 +134,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
       {/* Desktop sidebar */}
       <aside
         data-testid="app-navigation"
-        className="hidden w-[228px] shrink-0 border-r border-border bg-card/40 lg:block"
+        className="hidden w-[236px] shrink-0 border-r border-border lg:block"
       >
         {sidebar}
       </aside>
@@ -130,8 +148,10 @@ export default function AppShell({ children }: { children: ReactNode }) {
         >
           <Menu className="h-4.5 w-4.5" aria-hidden />
         </button>
-        <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Radar className="h-4 w-4 text-primary" aria-hidden />
+        <span className="flex items-center gap-2 text-sm font-bold text-foreground">
+          <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-primary">
+            <Radar className="h-[13px] w-[13px] text-primary-foreground" aria-hidden />
+          </span>
           Octolens
         </span>
       </div>
@@ -155,6 +175,60 @@ export default function AppShell({ children }: { children: ReactNode }) {
       <main className="min-w-0 flex-1 overflow-y-auto pt-12 lg:pt-0">{children}</main>
 
       {showAuthModal && <AuthOverlay onClose={() => setShowAuthModal(false)} />}
+    </div>
+  )
+}
+
+// ─── Sidebar data (mounted only when signed in) ──────────────────────────────
+
+/**
+ * Owns the authed `mentions` / subscription reads so they never fire for a
+ * signed-out visitor (which would 401). Reports counts up for the nav badge
+ * and renders the usage card.
+ */
+function SidebarData({ onCounts }: { onCounts: (c: { newCount: number; used: number }) => void }) {
+  const sub = useSubscription()
+  const { records: mentions } = useQuery<{ status?: string }>('mentions', { limit: 500 })
+
+  const newCount = useMemo(
+    () => (mentions ?? []).filter((r) => (r.data.status ?? 'new') === 'new').length,
+    [mentions],
+  )
+  const used = mentions?.length ?? 0
+
+  useEffect(() => {
+    onCounts({ newCount, used })
+  }, [newCount, used, onCounts])
+
+  return <UsageCard used={used} tier={sub?.tier as SubscriptionPlanSlug | undefined} />
+}
+
+// ─── Usage card ──────────────────────────────────────────────────────────────
+
+function UsageCard({ used, tier }: { used: number; tier: SubscriptionPlanSlug | undefined }) {
+  const slug: SubscriptionPlanSlug = tier ?? 'free'
+  const plan = subscriptionPlans.find((p) => p.slug === slug)
+  const quota = PLAN_QUOTAS[slug]
+  const pct = Math.min(100, quota > 0 ? Math.round((used / quota) * 100) : 0)
+
+  return (
+    <div className="rounded-lg border border-border bg-card px-3 py-2.5 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="text-[12px] font-semibold text-foreground">{plan?.name ?? 'Trial'} plan</span>
+        <Link
+          to="/pricing"
+          className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-primary hover:text-primary/80"
+        >
+          Upgrade
+          <ArrowUpRight className="h-3 w-3" aria-hidden />
+        </Link>
+      </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-accent">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+      </div>
+      <p className="mt-1.5 font-mono text-[10.5px] tabular-nums text-tertiary">
+        {used.toLocaleString()} / {quota.toLocaleString()} mentions
+      </p>
     </div>
   )
 }
@@ -208,7 +282,7 @@ function UserRow({ isLoaded, isSignedIn, profileReady, user, userRole, onSignIn 
         aria-expanded={menuOpen}
         className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors hover:bg-secondary"
       >
-        <span className="flex h-6 w-6 shrink-0 items-center justify-center overflow-hidden rounded-full bg-muted text-[11px] font-semibold text-muted-foreground ring-1 ring-inset ring-border">
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-full bg-primary/[0.08] text-[11px] font-semibold text-primary">
           {user.imageUrl ? (
             <img src={user.imageUrl} alt="" referrerPolicy="no-referrer" className="h-full w-full rounded-full object-cover" />
           ) : (
@@ -229,7 +303,7 @@ function UserRow({ isLoaded, isSignedIn, profileReady, user, userRole, onSignIn 
           <div className="fixed inset-0 z-40" onClick={() => setMenuOpen(false)} aria-hidden />
           <div
             role="menu"
-            className="absolute bottom-[calc(100%+6px)] left-0 z-50 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-[0_4px_16px_0_rgba(0,0,0,0.4)]"
+            className="absolute bottom-[calc(100%+6px)] left-0 z-50 w-full overflow-hidden rounded-lg border border-border bg-popover shadow-[0_4px_20px_0_rgba(0,0,0,0.08)]"
           >
             <div className="border-b border-border px-3 py-2">
               <div className="truncate text-[13px] font-medium text-foreground">{user.name || 'Signed in'}</div>

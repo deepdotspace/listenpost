@@ -4,9 +4,9 @@
  * by deleting the row.
  */
 
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { useQuery, useMutations, getAuthToken } from 'deepspace'
-import { KeyRound } from 'lucide-react'
+import { KeyRound, Plus, Trash2 } from 'lucide-react'
 import {
   Badge,
   Button,
@@ -16,15 +16,46 @@ import {
   EmptyState,
   SkeletonList,
   useToast,
+  cn,
 } from '@/components/ui'
 import { PageHeader, SectionLabel } from '../../components/PageHeader'
 import type { ApiKey } from '../../types'
 
+/** 32×18 accent switch — drives the same is_active mutation surface. */
+function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; label?: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      aria-label={label}
+      onClick={onClick}
+      className={cn(
+        'inline-flex h-[18px] w-8 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors',
+        on ? 'bg-primary' : 'bg-[#d5d9df]',
+      )}
+    >
+      <span
+        className={cn(
+          'h-3.5 w-3.5 rounded-full bg-white shadow-[0_1px_2px_rgba(0,0,0,0.2)] transition-transform',
+          on && 'translate-x-[14px]',
+        )}
+      />
+    </button>
+  )
+}
+
+function shortWhen(iso?: string): string {
+  if (!iso) return 'never'
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
 export default function ApiKeysPage() {
   const { records: keys, status } = useQuery<ApiKey>('api_keys', { orderBy: 'createdAt', orderDir: 'desc' })
-  const { remove } = useMutations<ApiKey>('api_keys')
+  const { put, remove } = useMutations<ApiKey>('api_keys')
   const { success, error } = useToast()
 
+  const labelRef = useRef<HTMLInputElement>(null)
   const [label, setLabel] = useState('')
   const [generating, setGenerating] = useState(false)
   const [rawKey, setRawKey] = useState<string | null>(null)
@@ -61,11 +92,21 @@ export default function ApiKeysPage() {
     <div className="flex min-h-full flex-col">
       <PageHeader
         title="API"
-        meta={<span>{loading ? '' : `${list.length} ${list.length === 1 ? 'key' : 'keys'}`}</span>}
+        meta={<span>Keys &amp; webhooks</span>}
+        actions={
+          <Button
+            size="sm"
+            className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
+            onClick={() => labelRef.current?.focus()}
+          >
+            <Plus aria-hidden />
+            Create key
+          </Button>
+        }
       />
 
-      <div className="flex-1 px-4 py-4 sm:px-6">
-        <div className="mx-auto max-w-3xl space-y-6">
+      <div className="flex-1 px-4 py-5 sm:px-5">
+        <div className="mx-auto max-w-4xl space-y-5">
           <p className="text-[13px] text-muted-foreground">
             Bearer credentials for the data-layer API. Query mentions with{' '}
             <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
@@ -75,17 +116,20 @@ export default function ApiKeysPage() {
           </p>
 
           {/* Generate row */}
-          <div className="rounded-lg border border-border bg-card/50 p-3">
+          <div className="rounded-xl border border-border bg-card p-3 shadow-card">
             <div className="flex gap-2">
               <Input
+                ref={labelRef}
                 data-testid="key-label"
                 value={label}
                 onChange={(e) => setLabel(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && generate()}
                 placeholder="Key label, e.g. 'zapier-prod'"
                 className="h-9 text-[13px]"
               />
               <Button
                 size="sm"
+                className="h-9"
                 data-testid="generate-key"
                 onClick={generate}
                 disabled={generating || !label.trim()}
@@ -95,14 +139,14 @@ export default function ApiKeysPage() {
             </div>
           </div>
 
-          {/* Key list */}
-          <section className="space-y-2">
-            <SectionLabel>Keys</SectionLabel>
+          {/* API keys table */}
+          <section>
+            <SectionLabel className="mb-2.5 text-tertiary">API keys</SectionLabel>
 
             {loading && <SkeletonList rows={3} />}
 
             {!loading && list.length === 0 && (
-              <div className="rounded-lg border border-border">
+              <div className="rounded-xl border border-border shadow-card">
                 <EmptyState
                   icon={<KeyRound aria-hidden />}
                   title="No API keys"
@@ -112,53 +156,91 @@ export default function ApiKeysPage() {
             )}
 
             {!loading && list.length > 0 && (
-              <ul className="divide-y divide-border rounded-lg border border-border bg-card/50">
-                {list.map((k) => (
-                  <li
-                    key={k.recordId}
-                    data-testid="key-row"
-                    className="flex items-center gap-3 px-4 py-3"
-                  >
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-                        <span className="text-[13px] font-medium text-foreground">{k.data.label}</span>
-                        <span className="font-mono text-[11px] text-muted-foreground">
-                          {k.data.prefix}…
-                        </span>
-                        {!k.data.is_active && (
-                          <Badge variant="secondary" size="sm">
-                            revoked
-                          </Badge>
-                        )}
-                      </div>
-                      <div className="mt-1 flex flex-wrap items-center gap-x-3 font-mono text-[11px] text-muted-foreground/80">
-                        {k.createdAt && <span>created {new Date(k.createdAt).toLocaleString()}</span>}
-                        <span>
-                          {k.data.last_used_at
-                            ? `last used ${new Date(k.data.last_used_at).toLocaleString()}`
-                            : 'never used'}
-                        </span>
-                      </div>
+              <div className="overflow-hidden rounded-xl border border-border bg-card shadow-card">
+                <div className="overflow-x-auto">
+                  <div className="min-w-[640px]">
+                    <div className="grid grid-cols-[1.4fr_1fr_120px_90px_54px_34px] items-center gap-3.5 border-b border-border px-[18px] py-2.5 text-[10px] font-bold uppercase tracking-[0.07em] text-tertiary">
+                      <span>Key</span>
+                      <span>Token</span>
+                      <span>Scopes</span>
+                      <span>Last used</span>
+                      <span className="text-center">Active</span>
+                      <span />
                     </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      data-testid="revoke-key"
-                      onClick={() => setRevoking(k.recordId)}
-                      className="h-7 px-2.5 text-xs text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-                    >
-                      Revoke
-                    </Button>
-                  </li>
-                ))}
-              </ul>
+
+                    {list.map((k) => {
+                      const active = !!k.data.is_active
+                      const scopes = k.data.scopes ?? []
+                      return (
+                        <div
+                          key={k.recordId}
+                          data-testid="key-row"
+                          className={cn(
+                            'group grid grid-cols-[1.4fr_1fr_120px_90px_54px_34px] items-center gap-3.5 border-b border-border px-[18px] py-[13px] transition-colors last:border-b-0 hover:bg-[#fafbfc]',
+                            !active && 'opacity-60',
+                          )}
+                        >
+                          <div className="flex min-w-0 items-center gap-2">
+                            <span className="truncate text-[13px] font-semibold text-foreground">
+                              {k.data.label}
+                            </span>
+                            {!active && (
+                              <Badge variant="secondary" size="sm">
+                                revoked
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="truncate font-mono text-[11.5px] text-muted-foreground">
+                            {k.data.prefix ? `${k.data.prefix}…` : '—'}
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {scopes.length > 0 ? (
+                              scopes.map((s) => (
+                                <span
+                                  key={s}
+                                  className="inline-flex h-[19px] items-center rounded-[5px] bg-accent px-1.5 font-mono text-[10px] font-semibold text-muted-foreground"
+                                >
+                                  {s}
+                                </span>
+                              ))
+                            ) : (
+                              <span className="font-mono text-[10px] text-tertiary">—</span>
+                            )}
+                          </div>
+                          <div className="font-mono text-[11.5px] text-tertiary">
+                            {shortWhen(k.data.last_used_at)}
+                          </div>
+                          <div className="flex justify-center">
+                            <Toggle
+                              on={active}
+                              label={active ? 'Disable key' : 'Enable key'}
+                              onClick={() => put(k.recordId, { is_active: active ? 0 : 1 })}
+                            />
+                          </div>
+                          <div className="flex justify-center">
+                            <button
+                              type="button"
+                              data-testid="revoke-key"
+                              aria-label="Revoke key"
+                              onClick={() => setRevoking(k.recordId)}
+                              className="inline-flex h-[26px] w-[26px] items-center justify-center rounded-[7px] text-tertiary transition-colors hover:bg-destructive/10 hover:text-destructive [&_svg]:size-[15px]"
+                            >
+                              <Trash2 aria-hidden />
+                            </button>
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              </div>
             )}
           </section>
 
           {/* Quick start */}
-          <section className="space-y-2">
-            <SectionLabel>Quick start</SectionLabel>
-            <div className="overflow-x-auto rounded-lg border border-border bg-card p-4">
+          <section>
+            <SectionLabel className="mb-2.5 text-tertiary">Quick start</SectionLabel>
+            <div className="overflow-x-auto rounded-xl border border-border bg-panel p-4 shadow-card">
               <pre className="font-mono text-[12px] leading-relaxed text-foreground">
                 {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/v2/mentions \\
   -H "Authorization: Bearer olk_..." \\
