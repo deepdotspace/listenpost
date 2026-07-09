@@ -5,3 +5,4 @@ dist
 .deepspace
 .worker-bundle.js
 *.tgz
+test-results/
