@@ -20,6 +20,7 @@ export const nav: NavItem[] = [
   { path: '/mentions', label: 'Mentions' },
   { path: '/keywords', label: 'Keywords' },
   { path: '/alerts', label: 'Delivery' },
+  { path: '/api-keys', label: 'API' },
   { path: '/api-status', label: 'API Status', devOnly: true },
   { path: '/settings', label: 'Settings' },
   // ── Features add nav items below this line ──
