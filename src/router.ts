@@ -8,6 +8,7 @@ export type Path =
   | `/`
   | `/admin`
   | `/alerts`
+  | `/analytics`
   | `/api-keys`
   | `/api-status`
   | `/assistant`
