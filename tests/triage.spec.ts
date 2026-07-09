@@ -58,8 +58,9 @@ test.describe('Multiplayer triage', () => {
       await expect(b.page.getByTestId('presence-peer').first()).toBeVisible({ timeout: 15000 })
 
       // A resolves via the status menu → B sees the resolved state live.
+      // (Menu items render in a body-level portal, so they're page-scoped.)
       await rowA.getByTestId('status-menu-trigger').click()
-      await rowA.getByTestId('set-status-resolved').click()
+      await a.page.getByTestId('set-status-resolved').click()
       await expect(rowB).toHaveAttribute('data-status', 'resolved', { timeout: 10000 })
       await expect(rowB.getByTestId('status-badge')).toHaveText('resolved')
 
