@@ -6,7 +6,7 @@
  */
 
 import { Suspense, type ReactNode } from 'react'
-import { Outlet, useRouteError } from 'react-router-dom'
+import { Outlet, useLocation, useRouteError } from 'react-router-dom'
 import { DeepSpaceAuthProvider, useAuthStatus } from 'deepspace'
 import { RecordProvider, RecordScope } from 'deepspace'
 import { ErrorScreen } from '../components/ErrorScreen'
@@ -16,6 +16,11 @@ import { APP_NAME, SCOPE_ID } from '../constants'
 import { schemas } from '../schemas'
 
 export default function App() {
+  const { pathname } = useLocation()
+  // The landing page owns the viewport — stacking the app's Navigation on
+  // top of the landing's own TopBar reads bolted-on.
+  const isLanding = pathname === '/' || pathname === '/landing'
+
   return (
     <ToastProvider>
       <DeepSpaceAuthProvider>
@@ -23,7 +28,7 @@ export default function App() {
           {/* data-testid="app-root" is the canonical "app shell mounted" hook
               every test relies on. Don't rename without updating templates/tests. */}
           <div data-testid="app-root" className="flex h-screen flex-col bg-background overflow-hidden">
-            <Navigation />
+            {!isLanding && <Navigation />}
             <main className="flex-1 overflow-y-auto min-h-0">
               <Suspense fallback={<div className="flex items-center justify-center h-full text-muted-foreground">Loading...</div>}>
                 <Outlet />
