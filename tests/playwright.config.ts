@@ -19,6 +19,9 @@ export default defineConfig({
   globalSetup: './helpers/global-setup.ts',
   timeout: 30_000,
   retries: 0,
+  // All specs share one dev Durable Object DB — exact-count assertions
+  // (analytics) and full-table cleanups race under parallel workers.
+  workers: 1,
   use: {
     baseURL: BASE_URL,
     headless: true,
