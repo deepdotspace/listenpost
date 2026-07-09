@@ -99,6 +99,32 @@ export default function MentionsPage() {
           <PresenceBar peers={peers} connected={connected} />
         </div>
 
+        {(keywords ?? []).length === 0 && status !== 'loading' && (
+          <div
+            data-testid="onboarding-banner"
+            className="mb-4 rounded-lg border border-primary/40 bg-primary/10 p-4"
+          >
+            <p className="font-semibold">Welcome to Octolens 👋</p>
+            <ol className="mt-2 list-decimal space-y-1 pl-5 text-sm text-muted-foreground">
+              <li>
+                Add a <span className="text-foreground">keyword</span> — your brand, a feature, a
+                competitor, or a pain point.
+              </li>
+              <li>
+                Give it <span className="text-foreground">brand context</span> so the AI knows what
+                counts as relevant for you.
+              </li>
+              <li>Mentions start streaming in within ~5 minutes — triage them here, live.</li>
+            </ol>
+            <a
+              href="/keywords"
+              className="mt-3 inline-flex items-center rounded-full bg-primary px-4 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+            >
+              Add your first keyword
+            </a>
+          </div>
+        )}
+
         <FilterBar
           sources={sources}
           keywords={keywords ?? []}
