@@ -13,6 +13,7 @@
 import { enqueueJob } from 'deepspace/worker'
 import type { CronContext, IngestEnv } from './context'
 import type { SourceFetcher } from './types'
+import { buildQuotaMap, consumeQuota, type QuotaState } from './quota'
 import { hackernewsFetcher } from './hackernews'
 import { redditFetcher } from './reddit'
 import { blueskyFetcher } from './bluesky'
@@ -40,6 +41,7 @@ const MAX_INSERTS_PER_POLL = 50
 
 interface KeywordEnvelope {
   recordId: string
+  createdBy: string
   data: {
     term: string
     keyword_type?: 'brand' | 'feature' | 'competitor' | 'pain_point'
@@ -54,12 +56,15 @@ export async function runIngestion(ctx: CronContext, env: IngestEnv): Promise<vo
     where: { is_active: 1 },
   })) as KeywordEnvelope[]
 
+  // Per-customer monthly quota (keyed by keyword owner), once per sweep.
+  const quotas = await buildQuotaMap(ctx, env, keywords.map((k) => k.createdBy))
+
   for (const keyword of keywords) {
     const enabled = keyword.data.sources ?? []
     for (const fetcher of FETCHERS) {
       if (!enabled.includes(fetcher.id)) continue
       try {
-        await pollSourceForKeyword(ctx, env, fetcher, keyword)
+        await pollSourceForKeyword(ctx, env, fetcher, keyword, quotas.get(keyword.createdBy))
       } catch (err) {
         // One bad source/keyword must not stall the whole sweep.
         console.error(`[ingest] ${fetcher.id} × "${keyword.data.term}" failed:`, err)
@@ -73,6 +78,7 @@ async function pollSourceForKeyword(
   env: IngestEnv,
   fetcher: SourceFetcher,
   keyword: KeywordEnvelope,
+  quota: QuotaState | undefined,
 ): Promise<void> {
   const [stateRow] = await ctx.records.query('sources_state', {
     where: { source: fetcher.id, keyword_id: keyword.recordId },
@@ -97,6 +103,12 @@ async function pollSourceForKeyword(
       limit: 1,
     })
     if (existing.length > 0) continue
+
+    // Plan quota: free tier stops here; paid tiers continue and meter overage.
+    if (!consumeQuota(env, keyword.createdBy, quota)) {
+      console.log(`[ingest] quota hard-cap hit for owner ${keyword.createdBy} — skipping rest of poll`)
+      break
+    }
 
     let recordId: string | undefined
     try {

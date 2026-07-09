@@ -16,6 +16,7 @@ export type Path =
   | `/home`
   | `/keywords`
   | `/mentions`
+  | `/pricing`
   | `/settings`
 
 export type Params = {
