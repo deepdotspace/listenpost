@@ -7,7 +7,7 @@
 
 import type { CronTask } from 'deepspace/worker'
 import { buildCronContext } from 'deepspace/worker'
-import { runIngestion } from './ingestion'
+import { purgeOrphanedMentions, runIngestion } from './ingestion'
 import type { CronContext, IngestEnv } from './ingestion/context'
 import type { Digest, Mention } from './types'
 import { digestIsDue, formatMentionText, matchesRule } from './delivery'
@@ -51,6 +51,9 @@ export async function runTask(name: string, env: unknown): Promise<void> {
           workspaceId: ws.recordId,
           ownerId: ws.data.owner_user ?? e.OWNER_USER_ID,
         })
+        // Backstop: clear mentions whose keyword has been deleted (rows
+        // orphaned before delete-time purging, or by mid-flight sweeps).
+        await purgeOrphanedMentions(wsCtx)
       } else if (name === 'send-digests') {
         await sendDueDigests(wsCtx, e)
       }
