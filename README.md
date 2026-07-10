@@ -115,9 +115,10 @@ Testing notes:
          "Connect Slack" button + channel picker on `/alerts`,
          `deliver-slack` job reads the workspace's stored token and posts
          via direct `fetch` to Slack's API ($0/message — skip the proxy).
-- [ ] Rebrand deploy: `wrangler name` → `listenpost`, brand strings, key
-      prefix `lpk_` → `lpk_`, webhook header → `X-Listenpost-Signature`
-      *(in progress this session)*.
+- [x] Rebrand deploy — shipped 2026-07-10, live at listenpost.app.space
+      (key prefix `lpk_`, header `X-Listenpost-Signature`). The retired
+      octolens-clone.app.space app can be deleted from the DeepSpace
+      dashboard whenever.
 - [ ] Stripe test-mode checkout verification through the pay wall + Stripe
       Connect onboarding at /earnings (owner action).
 - [ ] Custom domain (`deepspace domain search/buy/attach`) — deferred.
