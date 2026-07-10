@@ -8,6 +8,8 @@ import type { Job, JobContext } from 'deepspace/worker'
 import { buildCronContext, enqueueJob } from 'deepspace/worker'
 import type { IngestEnv } from './ingestion/context'
 import type { CronContext } from './ingestion/context'
+import { purgeKeywordData, sweepKeyword, type KeywordEnvelope } from './ingestion'
+import { buildQuotaMap } from './ingestion/quota'
 import type { AlertRule, Keyword, Mention, WebhookEndpoint } from './types'
 import { buildScoringPrompt, parseScore, SCORING_SYSTEM_PROMPT } from './scoring'
 import { matchesRule, signPayload, formatMentionText } from './delivery'
@@ -23,6 +25,21 @@ export interface ScoreMentionPayload {
   workspaceId?: string
   mention: Mention
   keyword: Pick<Keyword, 'term' | 'keyword_type' | 'brand_context'>
+}
+
+/** Payload for the sweep-keyword job — first crawl right after creation. */
+export interface SweepKeywordPayload {
+  keywordId: string
+  workspaceId: string
+  /** Workspace owner — quota/overage bills this user. */
+  ownerId: string
+}
+
+/** Payload for the purge-keyword job — clears leftovers of a deleted
+ * keyword when the inline purge in the purgeKeyword action hit its cap. */
+export interface PurgeKeywordPayload {
+  keywordId: string
+  workspaceId: string
 }
 
 interface DeliverSlackPayload {
@@ -85,6 +102,31 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
       await evaluateDeliveries(tools, e, scored, mentionId, payloadWs)
 
       return score
+    }
+
+    case 'sweep-keyword': {
+      const { keywordId, workspaceId, ownerId } = job.payload as unknown as SweepKeywordPayload
+
+      // Load the keyword from its tenant room; it may have been deleted or
+      // paused between enqueue and pickup.
+      const keywords = (await tools.records.query('keywords', {
+        limit: 500,
+      })) as KeywordEnvelope[]
+      const keyword = keywords.find((k) => k.recordId === keywordId)
+      if (!keyword || !keyword.data.is_active) return { skipped: 'keyword gone or inactive' }
+
+      const quotas = await buildQuotaMap(tools, e, [ownerId])
+      await sweepKeyword(tools, e, keyword, { workspaceId, ownerId }, quotas.get(ownerId))
+      return { swept: keyword.data.term }
+    }
+
+    case 'purge-keyword': {
+      const { keywordId } = job.payload as unknown as PurgeKeywordPayload
+      // Generous cap: the queue is serial, so finish in one pickup when
+      // possible; throw on !done so JobRoom retries for the remainder.
+      const { purged, done } = await purgeKeywordData(tools, keywordId, 2000)
+      if (!done) throw new Error(`purge incomplete after ${purged} deletes — retrying`)
+      return { purged }
     }
 
     case 'deliver-slack': {

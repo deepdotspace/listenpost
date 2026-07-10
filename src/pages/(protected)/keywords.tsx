@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { useQuery, useMutations, useUser } from 'deepspace'
+import { useQuery, useMutations, useUser, getAuthToken } from 'deepspace'
 import { Plus, MoreVertical } from 'lucide-react'
 import {
   Button,
@@ -18,6 +18,7 @@ import {
   cn,
 } from '@/components/ui'
 import { PageHeader } from '../../components/PageHeader'
+import { useWorkspace } from '../../components/WorkspaceProvider'
 import type { Keyword, KeywordType } from '../../types'
 
 const KEYWORD_TYPES: { id: KeywordType; label: string }[] = [
@@ -105,6 +106,7 @@ export default function KeywordsPage() {
   const { records, status } = useQuery<Keyword>('keywords', { orderBy: 'createdAt', orderDir: 'desc' })
   const { create, put, remove } = useMutations<Keyword>('keywords')
   const { user } = useUser()
+  const { currentId: workspaceId } = useWorkspace()
   const { success, error } = useToast()
 
   const [editor, setEditor] = useState<EditorState | null>(null)
@@ -132,14 +134,46 @@ export default function KeywordsPage() {
         await put(editor.recordId, data)
         success('Keyword updated')
       } else {
-        await create(data)
-        success('Keyword added', 'Crawling starts on the next poll cycle.')
+        const recordId = await create(data)
+        const swept = await callKeywordAction('sweepKeyword', recordId)
+        success(
+          'Keyword added',
+          swept
+            ? 'First crawl started — mentions will stream in shortly.'
+            : 'Crawling starts on the next poll cycle.',
+        )
       }
       setEditor(null)
     } catch (err) {
       error('Save failed', String(err))
     } finally {
       setSaving(false)
+    }
+  }
+
+  /**
+   * Fire a keyword server action (immediate sweep on create, mention purge
+   * on delete). Best-effort: on failure the cron sweep converges to the
+   * same state eventually, so we only degrade the toast copy.
+   */
+  async function callKeywordAction(
+    action: 'sweepKeyword' | 'purgeKeyword',
+    keywordId: string,
+  ): Promise<boolean> {
+    if (!workspaceId) return false
+    try {
+      const res = await fetch(`/api/actions/${action}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await getAuthToken()}`,
+        },
+        body: JSON.stringify({ workspaceId, keywordId }),
+      })
+      const json = (await res.json()) as { success?: boolean }
+      return res.ok && json.success === true
+    } catch {
+      return false
     }
   }
 
@@ -155,7 +189,13 @@ export default function KeywordsPage() {
     if (!deleting) return
     try {
       await remove(deleting)
-      success('Keyword deleted')
+      const purged = await callKeywordAction('purgeKeyword', deleting)
+      success(
+        'Keyword deleted',
+        purged
+          ? 'Its mentions have been cleared.'
+          : 'Its mentions will be cleared on the next poll cycle.',
+      )
     } catch (err) {
       error('Delete failed', String(err))
     } finally {
