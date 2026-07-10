@@ -35,11 +35,33 @@ export const subscriptionPlans = [
 export type SubscriptionPlanSlug = (typeof subscriptionPlans)[number]['slug']
 
 /** Monthly mention quota per plan. Free is a hard cap; paid plans meter
- * overage per mention beyond quota. */
+ * overage per mention beyond quota. Trial is sized as a taste of the
+ * product (~$2/mo scoring cost), not a free tier to live on. */
 export const PLAN_QUOTAS: Record<SubscriptionPlanSlug, number> = {
-  free: 5_000,
+  free: 1_000,
   pro: 15_000,
   scale: 50_000,
+}
+
+/**
+ * ACTIVE-keyword cap per plan. Paid-source polling cost scales per
+ * keyword (up to ~$30/keyword-month with every paid source enabled), so
+ * this cap is what makes the cost+margin pricing structural rather than
+ * statistical. Paused keywords don't poll and don't count.
+ *
+ * Enforced in three places: the keywords UI (best-effort, viewer's tier),
+ * the sweep-keyword job, and the poll-sources cron (authoritative, the
+ * workspace OWNER's tier — the owner is the payer).
+ */
+export const PLAN_KEYWORD_CAPS: Record<SubscriptionPlanSlug, number> = {
+  free: 2,
+  pro: 5,
+  scale: 20,
+}
+
+export function keywordCapForTier(tier: string | undefined): number {
+  const slug = (tier ?? 'free') as SubscriptionPlanSlug
+  return PLAN_KEYWORD_CAPS[slug] ?? PLAN_KEYWORD_CAPS.free
 }
 
 /** Overage price per mention beyond quota, in cents (fractional allowed).

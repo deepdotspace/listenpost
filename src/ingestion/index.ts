@@ -11,6 +11,7 @@
  */
 
 import { enqueueJob } from 'deepspace/worker'
+import { keywordCapForTier } from '../subscriptions'
 import type { CronContext, IngestEnv } from './context'
 import type { SourceFetcher } from './types'
 import { buildQuotaMap, consumeQuota, type QuotaState } from './quota'
@@ -42,6 +43,7 @@ const MAX_INSERTS_PER_POLL = 50
 export interface KeywordEnvelope {
   recordId: string
   createdBy: string
+  createdAt: string
   data: {
     term: string
     keyword_type?: 'brand' | 'feature' | 'competitor' | 'pain_point'
@@ -55,6 +57,18 @@ export interface KeywordEnvelope {
 export interface IngestTenant {
   workspaceId: string
   ownerId: string
+}
+
+/**
+ * The plan's active-keyword allowance: oldest `cap` active keywords, by
+ * createdAt. Deterministic, so which keywords poll doesn't churn between
+ * sweeps when a tenant is over cap (e.g. after a downgrade). Shared by the
+ * cron sweep and the sweep-keyword job so both enforce the same set.
+ */
+export function keywordsWithinCap(keywords: KeywordEnvelope[], cap: number): KeywordEnvelope[] {
+  return [...keywords]
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+    .slice(0, cap)
 }
 
 export async function runIngestion(
@@ -71,7 +85,17 @@ export async function runIngestion(
   const quotas = await buildQuotaMap(ctx, env, [tenant.ownerId])
   const quota = quotas.get(tenant.ownerId)
 
-  for (const keyword of keywords) {
+  // Plan keyword cap (owner's tier) — polling cost scales per keyword, so
+  // this is the authoritative cost gate; the UI check is best-effort only.
+  const cap = keywordCapForTier(quota?.tier)
+  const polled = keywordsWithinCap(keywords, cap)
+  if (polled.length < keywords.length) {
+    console.log(
+      `[ingest] keyword cap: polling ${polled.length}/${keywords.length} active keywords (tier ${quota?.tier ?? 'free'})`,
+    )
+  }
+
+  for (const keyword of polled) {
     await sweepKeyword(ctx, env, keyword, tenant, quota)
   }
 }

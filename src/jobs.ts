@@ -8,7 +8,13 @@ import type { Job, JobContext } from 'deepspace/worker'
 import { buildCronContext, enqueueJob } from 'deepspace/worker'
 import type { IngestEnv } from './ingestion/context'
 import type { CronContext } from './ingestion/context'
-import { purgeKeywordData, sweepKeyword, type KeywordEnvelope } from './ingestion'
+import {
+  keywordsWithinCap,
+  purgeKeywordData,
+  sweepKeyword,
+  type KeywordEnvelope,
+} from './ingestion'
+import { keywordCapForTier } from './subscriptions'
 import { WORKSPACE_ROOM_SCHEMAS } from './workspace-schemas'
 import { buildQuotaMap } from './ingestion/quota'
 import type { AlertRule, Keyword, Mention, WebhookEndpoint } from './types'
@@ -132,7 +138,17 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
       if (!keyword || !keyword.data.is_active) return { skipped: 'keyword gone or inactive' }
 
       const quotas = await buildQuotaMap(tools, e, [ownerId])
-      await sweepKeyword(tools, e, keyword, { workspaceId, ownerId }, quotas.get(ownerId))
+      const quota = quotas.get(ownerId)
+
+      // Same cap set as the cron sweep: a keyword beyond the plan's
+      // active-keyword allowance doesn't get its first crawl either.
+      const active = keywords.filter((k) => k.data.is_active)
+      const cap = keywordCapForTier(quota?.tier)
+      if (!keywordsWithinCap(active, cap).some((k) => k.recordId === keywordId)) {
+        return { skipped: `over keyword cap (${cap})` }
+      }
+
+      await sweepKeyword(tools, e, keyword, { workspaceId, ownerId }, quota)
       return { swept: keyword.data.term }
     }
 

@@ -21,6 +21,13 @@ import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { MotionConfig, motion, useReducedMotion } from 'framer-motion'
 import { ArrowRight, Radar } from 'lucide-react'
+import {
+  subscriptionPlans,
+  PLAN_QUOTAS,
+  PLAN_KEYWORD_CAPS,
+  OVERAGE_PER_MENTION_CENTS,
+  type SubscriptionPlanSlug,
+} from '../../subscriptions'
 
 // ── Signature element: live scored feed ─────────────────────────────────────
 
@@ -414,41 +421,31 @@ function DataLayer() {
 
 // ── Pricing ──────────────────────────────────────────────────────────────────
 
-const PLANS: Array<{
-  name: string
-  price: string
-  blurb: string
-  quota: string
-  overage: string
-  recommended?: boolean
-  cta: string
-}> = [
-  {
-    name: 'Trial',
-    price: '$0',
-    blurb: 'Kick the tires on a real feed.',
-    quota: '5,000',
-    overage: 'hard cap — upgrade to keep ingesting',
-    cta: 'Start trial',
-  },
-  {
-    name: 'Pro',
-    price: '$159',
-    blurb: 'For teams monitoring a brand seriously.',
-    quota: '15,000',
-    overage: 'then $0.013 per extra mention',
-    recommended: true,
-    cta: 'Select Pro',
-  },
-  {
-    name: 'Scale',
-    price: '$499',
-    blurb: 'High-volume brands and agencies.',
-    quota: '50,000',
-    overage: 'then $0.010 per extra mention',
-    cta: 'Select Scale',
-  },
-]
+// Marketing copy per plan; the numbers are derived from src/subscriptions.ts
+// so the landing page can never drift from the real Stripe-synced pricing.
+const PLAN_COPY: Record<SubscriptionPlanSlug, { blurb: string; cta: string; recommended?: boolean }> = {
+  free: { blurb: 'Kick the tires on a real feed.', cta: 'Start trial' },
+  pro: { blurb: 'For teams monitoring a brand seriously.', cta: 'Select Pro', recommended: true },
+  scale: { blurb: 'High-volume brands and agencies.', cta: 'Select Scale' },
+}
+
+/** Up to 4 decimals, trailing zeros trimmed (0.25¢ → $0.0025). */
+const fmtOverage = (cents: number) =>
+  '$' + (cents / 100).toFixed(4).replace(/0+$/, '').replace(/\.$/, '')
+
+const PLANS = subscriptionPlans.map((p) => ({
+  name: p.name,
+  price: `$${Math.round(p.priceCents / 100)}`,
+  blurb: PLAN_COPY[p.slug].blurb,
+  quota: PLAN_QUOTAS[p.slug].toLocaleString(),
+  keywords: PLAN_KEYWORD_CAPS[p.slug],
+  overage:
+    OVERAGE_PER_MENTION_CENTS[p.slug] > 0
+      ? `then ${fmtOverage(OVERAGE_PER_MENTION_CENTS[p.slug])} per extra mention`
+      : 'hard cap — upgrade to keep ingesting',
+  recommended: PLAN_COPY[p.slug].recommended,
+  cta: PLAN_COPY[p.slug].cta,
+}))
 
 function Pricing() {
   const navigate = useNavigate()
@@ -492,6 +489,10 @@ function Pricing() {
               <li>
                 <span className="font-semibold tabular-nums text-foreground">{p.quota}</span> mentions /
                 month
+              </li>
+              <li>
+                <span className="font-semibold tabular-nums text-foreground">{p.keywords}</span> active
+                keywords
               </li>
               <li>{p.overage}</li>
             </ul>

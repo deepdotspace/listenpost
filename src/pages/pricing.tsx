@@ -1,8 +1,8 @@
 /**
- * Pricing — public page. Trial (5k mentions/mo), Pro $79 (15k), Scale $239
+ * Pricing — public page. Trial (1k mentions/mo), Pro $79 (15k), Scale $239
  * (50k), with per-mention overage on paid tiers — cost + ~25-30% margin
- * (see src/subscriptions.ts for the cost model).
- * One card per plan: name, price, blurb, quota + overage, select button.
+ * (see src/subscriptions.ts for the cost model and keyword caps).
+ * One card per plan: name, price, blurb, quota + keywords + overage.
  */
 
 import { useSubscription, useAuth } from 'deepspace'
@@ -11,6 +11,7 @@ import { PageHeader } from '../components/PageHeader'
 import {
   subscriptionPlans,
   PLAN_QUOTAS,
+  PLAN_KEYWORD_CAPS,
   OVERAGE_PER_MENTION_CENTS,
   type SubscriptionPlanSlug,
 } from '../subscriptions'
@@ -88,6 +89,12 @@ export default function PricingPage() {
                       {PLAN_QUOTAS[slug].toLocaleString()}
                     </span>{' '}
                     mentions / month
+                  </li>
+                  <li>
+                    <span className="font-semibold tabular-nums text-foreground">
+                      {PLAN_KEYWORD_CAPS[slug]}
+                    </span>{' '}
+                    active keywords
                   </li>
                   <li>
                     {OVERAGE_PER_MENTION_CENTS[slug] > 0 ? (

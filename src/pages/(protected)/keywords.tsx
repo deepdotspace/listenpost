@@ -4,7 +4,7 @@
  */
 
 import { useMemo, useState } from 'react'
-import { useQuery, useMutations, useUser, getAuthToken } from 'deepspace'
+import { useQuery, useMutations, useUser, useSubscription, getAuthToken } from 'deepspace'
 import { Plus, MoreVertical } from 'lucide-react'
 import {
   Button,
@@ -19,6 +19,7 @@ import {
 } from '@/components/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { useWorkspace } from '../../components/WorkspaceProvider'
+import { keywordCapForTier } from '../../subscriptions'
 import type { Keyword, KeywordType } from '../../types'
 
 const KEYWORD_TYPES: { id: KeywordType; label: string }[] = [
@@ -119,8 +120,25 @@ export default function KeywordsPage() {
   const activeCount = useMemo(() => sorted.filter((r) => r.data.is_active).length, [sorted])
   const loading = status === 'loading'
 
+  // Best-effort UI gate on the viewer's tier — the cron sweep enforces the
+  // authoritative cap against the workspace OWNER's tier (they pay).
+  const sub = useSubscription()
+  const keywordCap = keywordCapForTier(sub?.tier)
+  const atCap = activeCount >= keywordCap
+
+  function capError() {
+    error(
+      'Keyword limit reached',
+      `Your plan allows ${keywordCap} active keywords. Pause one, or upgrade for more.`,
+    )
+  }
+
   async function save() {
     if (!editor || !editor.term.trim()) return
+    if (!editor.recordId && atCap) {
+      capError()
+      return
+    }
     setSaving(true)
     try {
       const data: Keyword = {
@@ -178,6 +196,10 @@ export default function KeywordsPage() {
   }
 
   async function toggleActive(recordId: string, isActive: number | undefined) {
+    if (!isActive && atCap) {
+      capError() // re-activating counts against the cap too
+      return
+    }
     try {
       await put(recordId, { is_active: isActive ? 0 : 1 })
     } catch (err) {
@@ -208,21 +230,32 @@ export default function KeywordsPage() {
       <PageHeader
         title="Keywords"
         meta={
-          <span>
-            {sorted.length} tracked · {activeCount} active
+          <span data-testid="keyword-cap-meta">
+            {sorted.length} tracked · {activeCount} / {keywordCap} active
           </span>
         }
         actions={
           canEdit && (
-            <Button
-              data-testid="add-keyword"
-              size="sm"
-              onClick={() => setEditor({ ...EMPTY_EDITOR })}
-              className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
-            >
-              <Plus aria-hidden />
-              Add keyword
-            </Button>
+            <div className="flex items-center gap-2.5">
+              {atCap && (
+                <a
+                  href="/pricing"
+                  className="text-[12px] font-medium text-primary hover:underline"
+                >
+                  Upgrade for more keywords
+                </a>
+              )}
+              <Button
+                data-testid="add-keyword"
+                size="sm"
+                disabled={atCap}
+                onClick={() => setEditor({ ...EMPTY_EDITOR })}
+                className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
+              >
+                <Plus aria-hidden />
+                Add keyword
+              </Button>
+            </div>
           )
         }
       />
