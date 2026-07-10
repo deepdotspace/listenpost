@@ -29,7 +29,7 @@ interface ChatRow {
   title?: string
 }
 
-/** Octolens-specific starter prompts for the empty state. */
+/** Listenpost-specific starter prompts for the empty state. */
 const SUGGESTED_PROMPTS = [
   'What are people saying about my keywords this week?',
   'Summarize negative mentions',

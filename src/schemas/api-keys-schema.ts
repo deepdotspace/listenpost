@@ -11,7 +11,7 @@ export const apiKeysSchema: CollectionSchema = {
     { name: 'label', storage: 'text', interpretation: 'plain', required: true },
     // SHA-256 hex of the raw key. Never store or log the raw key.
     { name: 'key_hash', storage: 'text', interpretation: 'plain', required: true, immutable: true },
-    // First characters of the key, for display (e.g. "olk_a1b2…").
+    // First characters of the key, for display (e.g. "lpk_a1b2…").
     { name: 'prefix', storage: 'text', interpretation: 'plain', immutable: true },
     { name: 'scopes', storage: 'text', interpretation: { kind: 'json' } },
     // Tenant this key reads from. Keys live in the APP room (one place to

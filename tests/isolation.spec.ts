@@ -55,7 +55,7 @@ test.describe('Workspace isolation', () => {
 
       // Direct socket attempt: B selecting A's workspace id must be refused
       // (the worker gate 403s a non-member), so B still sees no such keyword.
-      await b.page.evaluate((id) => localStorage.setItem('octolens-workspace', id), aWs)
+      await b.page.evaluate((id) => localStorage.setItem('listenpost-workspace', id), aWs)
       await b.page.goto('/keywords')
       await b.page.waitForTimeout(2000)
       await expect(b.page.getByText(secretTerm)).toHaveCount(0)

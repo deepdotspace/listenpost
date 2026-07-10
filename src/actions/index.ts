@@ -25,7 +25,7 @@ export const actions: Record<string, ActionHandler<Env>> = {
     if (!role) return { success: false, error: 'not a member of this workspace' }
 
     const bytes = crypto.getRandomValues(new Uint8Array(24))
-    const rawKey = 'olk_' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
+    const rawKey = 'lpk_' + [...bytes].map((b) => b.toString(16).padStart(2, '0')).join('')
     const keyHash = await hashApiKey(rawKey)
     const prefix = rawKey.slice(0, 12)
 

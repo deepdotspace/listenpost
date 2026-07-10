@@ -124,7 +124,7 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            ...(signature ? { 'X-Octolens-Signature': `sha256=${signature}` } : {}),
+            ...(signature ? { 'X-Listenpost-Signature': `sha256=${signature}` } : {}),
           },
           body,
         })

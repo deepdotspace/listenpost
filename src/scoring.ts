@@ -13,7 +13,7 @@ export interface MentionScore {
   tags: string[]
 }
 
-/** Tags the model may assign. Mirrors Octolens's auto-tag vocabulary. */
+/** Tags the model may assign. Mirrors Listenpost's auto-tag vocabulary. */
 export const TAG_VOCABULARY = [
   'feature_request',
   'bug_report',

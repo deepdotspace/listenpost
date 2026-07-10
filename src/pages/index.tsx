@@ -5,7 +5,7 @@
 
 import { Navigate } from 'react-router-dom'
 import { useAuthStatus } from 'deepspace'
-import OctolensLanding from '../components/landing/OctolensLanding'
+import ListenpostLanding from '../components/landing/ListenpostLanding'
 
 export default function Index() {
   const { isLoaded, isSignedIn } = useAuthStatus()
@@ -18,5 +18,5 @@ export default function Index() {
     )
   }
 
-  return isSignedIn ? <Navigate to="/mentions" replace /> : <OctolensLanding />
+  return isSignedIn ? <Navigate to="/mentions" replace /> : <ListenpostLanding />
 }

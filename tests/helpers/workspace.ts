@@ -33,7 +33,7 @@ export async function ensureWorkspace(page: Page, name = 'Test Workspace'): Prom
     // Single-user specs need an OWNED workspace (owner → ws-room admin):
     // reuse the account's named test workspace when it exists — creating a
     // fresh one per run made pool accounts accumulate dozens — else create it.
-    const persisted = await page.evaluate(() => localStorage.getItem('octolens-workspace'))
+    const persisted = await page.evaluate(() => localStorage.getItem('listenpost-workspace'))
     if (!persisted) {
       await page.getByTestId('workspace-switcher').click()
       const existing = page.getByRole('menuitem', { name, exact: true })
@@ -47,10 +47,10 @@ export async function ensureWorkspace(page: Page, name = 'Test Workspace'): Prom
     }
   }
 
-  await page.waitForFunction(() => !!localStorage.getItem('octolens-workspace'), undefined, {
+  await page.waitForFunction(() => !!localStorage.getItem('listenpost-workspace'), undefined, {
     timeout: 15_000,
   })
-  const id = await page.evaluate(() => localStorage.getItem('octolens-workspace'))
+  const id = await page.evaluate(() => localStorage.getItem('listenpost-workspace'))
   if (!id) throw new Error('no workspace id in localStorage after ensureWorkspace')
   return id
 }
@@ -89,7 +89,7 @@ export async function seedSharedWorkspace(
 
 /** Point the page at a specific workspace id (must be visible to the user). */
 export async function selectWorkspace(page: Page, wsId: string): Promise<void> {
-  await page.evaluate((id) => localStorage.setItem('octolens-workspace', id), wsId)
+  await page.evaluate((id) => localStorage.setItem('listenpost-workspace', id), wsId)
 }
 
 /** Run a debug-SQL statement against a workspace room. */

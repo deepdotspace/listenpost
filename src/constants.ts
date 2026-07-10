@@ -1,5 +1,5 @@
 /** App name — replaced by the CLI during scaffolding */
-export const APP_NAME = 'octolens-clone'
+export const APP_NAME = 'listenpost'
 
 /** Primary scope ID for the app's RecordRoom DO */
 export const SCOPE_ID = `app:${APP_NAME}`

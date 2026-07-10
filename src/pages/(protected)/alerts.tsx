@@ -577,7 +577,7 @@ function WebhooksSection() {
         <div className="min-w-0">
           <SectionLabel className="text-tertiary">Webhook endpoints</SectionLabel>
           <p className="mt-0.5 text-[11.5px] text-tertiary">
-            Deliveries are HMAC-signed (X-Octolens-Signature). Discord-compatible.
+            Deliveries are HMAC-signed (X-Listenpost-Signature). Discord-compatible.
           </p>
         </div>
         <Button
@@ -681,7 +681,7 @@ function WebhooksSection() {
                 className="h-9 font-mono text-[13px]"
                 value={editing.url}
                 onChange={(e) => setEditing({ ...editing, url: e.target.value })}
-                placeholder="https://example.com/webhooks/octolens"
+                placeholder="https://example.com/webhooks/listenpost"
               />
             </div>
             <div>

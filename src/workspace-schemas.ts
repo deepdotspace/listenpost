@@ -1,7 +1,7 @@
 /**
  * Client-side scope split for multi-tenant workspaces.
  *
- * The APP room (`app:octolens-clone`) holds the tenancy registry + global
+ * The APP room (`app:listenpost`) holds the tenancy registry + global
  * account surfaces; each workspace's data lives in its own RecordRoom DO at
  * `ws:<workspaceRecordId>` (see worker.ts `/ws/:roomId`).
  *

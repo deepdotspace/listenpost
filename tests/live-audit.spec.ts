@@ -28,7 +28,7 @@ const PAGES: Array<{ path: string; name: string; settle?: number }> = [
 
 test.describe('Live UX audit', () => {
   test.skip(
-    ({ baseURL }) => !baseURL?.includes('octolens-clone.app.space'),
+    ({ baseURL }) => !baseURL?.includes('listenpost.app.space'),
     'live-only: run with --config tests/live.config.ts',
   )
 

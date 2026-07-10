@@ -3,8 +3,8 @@
  * previewing. Signed-out visitors get it at / via index.tsx.
  */
 
-import OctolensLanding from '../components/landing/OctolensLanding'
+import ListenpostLanding from '../components/landing/ListenpostLanding'
 
 export default function LandingRoute() {
-  return <OctolensLanding />
+  return <ListenpostLanding />
 }

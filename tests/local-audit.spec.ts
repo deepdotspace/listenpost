@@ -9,12 +9,12 @@ async function seedDemo(request: APIRequestContext, wsId: string) {
     request,
     wsId,
     `INSERT OR IGNORE INTO c_keywords (_row_id,_created_by,_created_at,_updated_at,col_term,col_keyword_type,col_brand_context,col_sources,col_is_active,col_created_by_user)
-     VALUES ('demo-kw-1','seed',?,?,'octolens','brand','AI keyword monitoring for devtools teams.','["hackernews","reddit","bluesky"]',1,'seed')`,
+     VALUES ('demo-kw-1','seed',?,?,'listenpost','brand','AI keyword monitoring for devtools teams.','["hackernews","reddit","bluesky"]',1,'seed')`,
     [now, now],
   )
   const rows: Array<[string, string, string, string, string, string, string, string, string, string]> = [
-    ['reddit', 'r1', 'Anyone using Octolens for brand monitoring?', 'Evaluating a few social listening tools for our devtools startup.', 'u/throwaway_dev', 'high', 'neutral', 'new', '{"points":142,"comments":38}', '["buying_intent","question"]'],
-    ['bluesky', 'b1', 'just switched from Mention to Octolens', 'half the mentions I used to triage manually never even reach me now.', '@maria.bsky', 'high', 'positive', 'new', '{"likes":56}', '["praise"]'],
+    ['reddit', 'r1', 'Anyone using Listenpost for brand monitoring?', 'Evaluating a few social listening tools for our devtools startup.', 'u/throwaway_dev', 'high', 'neutral', 'new', '{"points":142,"comments":38}', '["buying_intent","question"]'],
+    ['bluesky', 'b1', 'just switched from Mention to Listenpost', 'half the mentions I used to triage manually never even reach me now.', '@maria.bsky', 'high', 'positive', 'new', '{"likes":56}', '["praise"]'],
     ['hackernews', 'h1', 'Show HN: social listening with AI relevance scoring', 'It watches Reddit, HN, Bluesky and GitHub for keywords.', 'pg_fan', 'high', 'positive', 'assigned', '{"points":89,"comments":41}', '["competitor_mention"]'],
     ['github', 'g1', 'Feature request: scheduled Slack digest', 'Would love a daily Slack digest instead of per-mention alerts.', 'octocat', 'medium', 'neutral', 'assigned', '{"replies":12}', '["feature_request"]'],
     ['youtube', 'y1', 'Top 5 Social Listening Tools in 2026', 'A full walkthrough comparing pricing, sources, and AI scoring.', 'TechReviewsDaily', 'medium', 'positive', 'resolved', '{"views":4200}', '["comparison"]'],

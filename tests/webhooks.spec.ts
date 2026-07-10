@@ -30,7 +30,7 @@ test.describe('Webhook delivery', () => {
       let body = ''
       req.on('data', (c) => (body += c))
       req.on('end', () => {
-        received.push({ body, signature: req.headers['x-octolens-signature'] as string | undefined })
+        received.push({ body, signature: req.headers['x-listenpost-signature'] as string | undefined })
         res.writeHead(200).end('ok')
       })
     })

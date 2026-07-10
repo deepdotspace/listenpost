@@ -1,7 +1,7 @@
 /**
- * Octolens landing — light "operations console" redesign.
+ * Listenpost landing — light "operations console" redesign.
  *
- * Product: Octolens watches 13+ web sources for your brand, features,
+ * Product: Listenpost watches 13+ web sources for your brand, features,
  *   competitors, and pain points, AI-scores every mention for relevance,
  *   sentiment, and intent, and streams the verdicts to your team — dashboard,
  *   Slack, webhooks, or raw API.
@@ -36,7 +36,7 @@ const FEED_SCRIPT: FeedEvent[] = [
   {
     source: 'hackernews',
     author: 'jkwon',
-    text: 'Anyone tried Octolens for brand monitoring? Evaluating it vs. rolling our own.',
+    text: 'Anyone tried Listenpost for brand monitoring? Evaluating it vs. rolling our own.',
     verdict: 'high · positive · buying_intent',
     routed: '#buying-signals',
   },
@@ -144,7 +144,7 @@ function TopBar() {
             <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-primary">
               <Radar className="h-[15px] w-[15px] text-primary-foreground" strokeWidth={2.2} aria-hidden />
             </span>
-            Octolens
+            Listenpost
           </span>
           <nav className="hidden items-center gap-[26px] font-mono text-[13px] md:flex">
             <a href="#sources" className="text-muted-foreground transition-colors hover:text-foreground">
@@ -193,7 +193,7 @@ function Hero() {
           transition={{ duration: 0.5, delay: 0.15 }}
           className="mt-[22px] max-w-[400px] text-[15.5px] leading-[1.6] text-muted-foreground"
         >
-          Octolens watches 13+ sources for your keywords, judges every hit
+          Listenpost watches 13+ sources for your keywords, judges every hit
           against your brand context, and streams the verdicts to your team
           while the thread is still hot.
         </motion.p>
@@ -306,7 +306,7 @@ const STEPS = [
     label: '01',
     title: 'Teach it your brand.',
     body: 'A keyword plus two sentences of context. That context rides along in every scoring prompt.',
-    snippet: `keyword: "octolens"
+    snippet: `keyword: "listenpost"
 type: brand
 context: "We sell keyword monitoring
 to devtools teams. Praise, bugs, and
@@ -394,8 +394,8 @@ function DataLayer() {
         <pre className="overflow-x-auto whitespace-pre rounded-[11px] border border-border bg-background p-[18px] font-mono text-[12px] leading-[1.7] text-foreground shadow-[0_1px_2px_rgba(0,0,0,0.03)]">
           <code>
             <span className="text-tertiary">$</span>
-            {' curl -X POST https://octolens-clone.app.space/api/v2/mentions \\\n    -H '}
-            <span className="text-primary">"Authorization: Bearer olk_..."</span>
+            {' curl -X POST https://listenpost.app.space/api/v2/mentions \\\n    -H '}
+            <span className="text-primary">"Authorization: Bearer lpk_..."</span>
             {` \\
     -d '{ "filters": { "sentiment": ["negative"] }, "limit": 25 }'
 
@@ -546,7 +546,7 @@ function Footer() {
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-[1120px] flex-wrap items-center justify-between gap-4 px-6 py-6 font-mono text-[11px] uppercase tracking-[0.24em] text-tertiary">
-        <span>octolens · brand monitoring · © {new Date().getFullYear()}</span>
+        <span>listenpost · brand monitoring · © {new Date().getFullYear()}</span>
         <span className="flex items-center gap-6">
           <a href="#pricing" className="transition-colors hover:text-foreground">
             pricing
@@ -562,7 +562,7 @@ function Footer() {
 
 // ── Page ─────────────────────────────────────────────────────────────────────
 
-export default function OctolensLanding() {
+export default function ListenpostLanding() {
   return (
     <MotionConfig reducedMotion="user">
       <div data-testid="landing-page" className="min-h-screen bg-background text-[14px] text-foreground">

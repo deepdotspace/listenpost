@@ -374,11 +374,11 @@
 
 
 /*
- * Octolens — light console theme (Stripe / Height / Linear grade).
+ * Listenpost — light console theme (Stripe / Height / Linear grade).
  * Crisp light surfaces, indigo accent, hairline borders. Token names are
  * unchanged from the shadcn baseline so components need no color edits.
  */
-[data-theme="octolens"] {
+[data-theme="listenpost"] {
   color-scheme: light;
 
   --color-background: #ffffff;

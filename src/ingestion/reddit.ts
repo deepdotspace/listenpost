@@ -38,7 +38,7 @@ export const redditFetcher: SourceFetcher = {
     url.searchParams.set('raw_json', '1')
 
     const res = await fetch(url.toString(), {
-      headers: { 'User-Agent': 'octolens-clone/1.0 (keyword monitoring; contact via app.space)' },
+      headers: { 'User-Agent': 'listenpost/1.0 (keyword monitoring; contact via app.space)' },
     })
     if (!res.ok) throw new Error(`Reddit search responded ${res.status}`)
     const json = (await res.json()) as { data?: { children?: RedditChild[] } }
