@@ -2,17 +2,15 @@
 
 > AI keyword monitoring for buying intent — a full-featured social-listening
 > product built on the [DeepSpace SDK](https://www.npmjs.com/package/deepspace)
-> as its flagship showcase app. Formerly built under the working name
-> "Octolens clone"; rebranded to **Listenpost**.
+> as its flagship showcase app.
 >
-> **Live:** https://listenpost.app.space *(rename in progress — previously
-> listenpost.app.space)*
+> **Live:** https://listenpost.app.space
 
 You give it keywords (your brand, features, competitors, pain points). It
-crawls 10+ web sources on a cron, AI-scores every mention for relevance,
-sentiment, and intent against your per-keyword brand context, and streams the
-verdicts to your team — a real-time multiplayer triage dashboard, Slack
-routing, email digests, HMAC-signed webhooks, and a REST data API.
+crawls 9 web sources, AI-scores every mention for relevance, sentiment, and
+intent against your per-keyword brand context, and streams the verdicts to
+your team — a real-time multiplayer triage dashboard, Slack routing, email
+digests, HMAC-signed webhooks, and a REST data API.
 
 ## Product surfaces
 
@@ -24,7 +22,7 @@ routing, email digests, HMAC-signed webhooks, and a REST data API.
 | Keywords / monitors | `/keywords` | Term + type + brand context + per-source toggles |
 | Delivery | `/alerts` | Alert rules → Slack/webhook, email digests, webhook endpoints (HMAC + retry) |
 | Data API | `/api-keys` | `POST /api/v2/mentions`, Bearer keys (hash-stored, shown once), cursor pagination |
-| Billing | `/pricing` | Trial $0/5k · Pro $159/15k · Scale $499/50k mentions/mo, metered overage |
+| Billing | `/pricing` | Trial $0 (1k mentions, 2 keywords) · Pro $79 (15k, 5) · Scale $239 (50k, 20), metered overage — priced at cost + ~25-30% margin |
 | Landing | `/` | Public marketing page (light theme, live scored-feed hero) |
 
 ## Architecture
@@ -54,8 +52,12 @@ app:<APP_NAME> room (registry)        ws:<workspaceId> rooms (one per tenant)
   member removal; onboarding creates the first workspace.
 - **Pipeline:** the cron sweeps every active workspace (`poll-sources` every
   5 min, `send-digests` every 15); job payloads carry `workspaceId` so
-  scoring/delivery read + write the right room. Quota bills the workspace
-  owner's subscription tier.
+  scoring/delivery read + write the right room. The mention quota and the
+  per-plan active-keyword cap both resolve against the workspace owner's
+  subscription tier (the owner is the payer).
+- **Lifecycle:** workspace deletion is owner-only with a type-the-name
+  confirm; the `deleteWorkspace` action removes the registry row, then a
+  `purge-workspace` job wipes every tenant-room collection.
 - **Data API:** keys are bound to one workspace at generation; the API
   resolves key-hash → workspace → that tenant's room.
 - **AI chat:** all `/api/ai/*` calls require `x-workspace-id` (membership
@@ -64,12 +66,18 @@ app:<APP_NAME> room (registry)        ws:<workspaceId> rooms (one per tenant)
 ### Ingestion pipeline
 
 ```
+keyword created  → sweepKeyword action → sweep-keyword job (immediate first
+                   crawl — no waiting for the next cron tick)
 CronRoom (per workspace, every 5 min)
-  keywords × enabled sources → fetch since cursor → dedupe (source, source_id)
+  active keywords (per-plan cap, oldest-first) × enabled sources
+  → fetch since cursor → dedupe (source, source_id)
   → insert mentions (relevance: pending) → enqueue score-mention job
+  → orphan sweep: purge mentions whose keyword no longer exists
 JobRoom: score-mention → anthropic (haiku) with brand context
   → { relevance, score, sentiment, tags } → live-sync to every dashboard
   → evaluate alert rules → deliver-slack / deliver-webhook (HMAC, retry)
+keyword deleted  → purgeKeyword action (inline) + purge-keyword job
+                   (mentions + cursors; queued scoring jobs skip unbilled)
 ```
 
 Sources: Hacker News (Algolia, 30-day first-poll backfill), Reddit, Bluesky,
@@ -98,7 +106,7 @@ Testing notes:
 
 ## TODO
 
-- [ ] **Slack OAuth — per-customer "Connect Slack"** *(next session)*.
+- [ ] **Slack OAuth — per-customer "Connect Slack"**.
       Today Slack delivery uses a single app-wide `SLACK_BOT_TOKEN`, which
       only ever posts to OUR workspace — not usable by real customers.
       Plan (no SDK changes needed):
@@ -115,10 +123,6 @@ Testing notes:
          "Connect Slack" button + channel picker on `/alerts`,
          `deliver-slack` job reads the workspace's stored token and posts
          via direct `fetch` to Slack's API ($0/message — skip the proxy).
-- [x] Rebrand deploy — shipped 2026-07-10, live at listenpost.app.space
-      (key prefix `lpk_`, header `X-Listenpost-Signature`). The retired
-      octolens-clone.app.space app can be deleted from the DeepSpace
-      dashboard whenever.
 - [ ] Stripe test-mode checkout verification through the pay wall + Stripe
       Connect onboarding at /earnings (owner action).
 - [ ] Custom domain (`deepspace domain search/buy/attach`) — deferred.
@@ -134,6 +138,8 @@ src/ingestion/             Source fetchers + per-tenant pipeline + quota
 src/cron.ts, src/jobs.ts   Workspace sweep, scoring + delivery jobs
 src/components/            AppShell, WorkspaceProvider, ChatPanel, UI kit
 src/pages/                 File-based routes (generouted); (protected)/ is auth-gated
-tests/                     Playwright suite (smoke/api/collab/isolation/live)
+tests/                     Playwright suite (16 specs: smoke, api, collab,
+                           isolation, keyword lifecycle/cap, workspace delete,
+                           webhooks, live-prod) + vitest unit tests in tests/unit
 OCTOLENS-CLONE-PLAN.md     Original build plan (historical) + status addendum
 ```
