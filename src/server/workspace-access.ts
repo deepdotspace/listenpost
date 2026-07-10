@@ -12,12 +12,17 @@ export interface WorkspaceAccessEnv {
 
 export type WorkspaceRole = 'admin' | 'member'
 
-/** Owner (or app owner) → admin; listed member → member; otherwise null. */
-export async function resolveWorkspaceRole(
+export interface WorkspaceRowData {
+  owner_user?: string
+  member_ids?: string[]
+  is_active?: number
+}
+
+/** Registry row for an ACTIVE workspace from the app room, or null. */
+export async function getWorkspaceData(
   env: WorkspaceAccessEnv,
   workspaceId: string,
-  userId: string,
-): Promise<WorkspaceRole | null> {
+): Promise<WorkspaceRowData | null> {
   const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
   try {
     const res = await stub.fetch(
@@ -36,18 +41,34 @@ export async function resolveWorkspaceRole(
     )
     const json = (await res.json()) as {
       success?: boolean
-      data?: {
-        record?: { data?: { owner_user?: string; member_ids?: string[]; is_active?: number } }
-      }
+      data?: { record?: { data?: WorkspaceRowData } }
     }
     const ws = json.success ? json.data?.record?.data : undefined
-    if (!ws || !ws.is_active) return null
-    if (ws.owner_user === userId || userId === env.OWNER_USER_ID) return 'admin'
-    if (Array.isArray(ws.member_ids) && ws.member_ids.includes(userId)) return 'member'
-    return null
+    return ws && ws.is_active ? ws : null
   } catch {
     return null
   }
+}
+
+/** Owner (or app owner) → admin; listed member → member; otherwise null. */
+export function workspaceRoleFor(
+  env: Pick<WorkspaceAccessEnv, 'OWNER_USER_ID'>,
+  ws: WorkspaceRowData,
+  userId: string,
+): WorkspaceRole | null {
+  if (ws.owner_user === userId || userId === env.OWNER_USER_ID) return 'admin'
+  if (Array.isArray(ws.member_ids) && ws.member_ids.includes(userId)) return 'member'
+  return null
+}
+
+/** Owner (or app owner) → admin; listed member → member; otherwise null. */
+export async function resolveWorkspaceRole(
+  env: WorkspaceAccessEnv,
+  workspaceId: string,
+  userId: string,
+): Promise<WorkspaceRole | null> {
+  const ws = await getWorkspaceData(env, workspaceId)
+  return ws ? workspaceRoleFor(env, ws, userId) : null
 }
 
 /** RecordRoom DO stub for a workspace's data room. */
