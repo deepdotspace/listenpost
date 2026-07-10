@@ -1,11 +1,14 @@
 import { test, expect } from 'deepspace/testing'
-import { ensureWorkspace } from './helpers/workspace'
+import { ensureWorkspace, wsSql } from './helpers/workspace'
 import type { APIRequestContext } from '@playwright/test'
 
 /**
  * Delete workspace — the owner can permanently remove a workspace from the
- * switcher dropdown. After deletion the registry row is gone and the app
- * re-selects another workspace the user can still enter (no dead selection).
+ * switcher dropdown (type-to-confirm gate). After deletion:
+ *  - the registry row is gone,
+ *  - the app re-selects another workspace the user can still enter,
+ *  - the purge-workspace job wipes the tenant room's data (keywords,
+ *    mentions, …) so the orphaned DO doesn't keep the storage forever.
  *
  * Runs single-user: the account owns the throwaway workspace it creates, so
  * the owner-only delete path (isOwner) is exercised end-to-end via real UI.
@@ -41,18 +44,57 @@ test.describe('Delete workspace', () => {
       .toBe(1)
     const doomedId = await a.page.evaluate(() => localStorage.getItem('listenpost-workspace'))
     expect(doomedId).not.toBe(homeId)
+    if (!doomedId) throw new Error('no selected workspace id')
 
-    // Delete it: switcher → Delete workspace → confirm.
+    // Seed tenant data directly into the doomed room (no crawling/scoring):
+    // inactive keywords with no sources, and mentions that reference them.
+    const now = new Date().toISOString()
+    const stamp = Date.now()
+    for (let i = 0; i < 3; i++) {
+      const kwId = `seed-kw-${i}-${stamp}`
+      await wsSql(
+        request,
+        doomedId,
+        `INSERT INTO c_keywords (_row_id, _created_by, _created_at, _updated_at, col_term, col_is_active, col_sources)
+         VALUES (?, ?, ?, ?, ?, 0, '[]')`,
+        [kwId, 'purge-test', now, now, `seed-term-${i}-${stamp}`],
+      )
+      await wsSql(
+        request,
+        doomedId,
+        `INSERT INTO c_mentions (_row_id, _created_by, _created_at, _updated_at, col_source, col_source_id, col_keyword_id)
+         VALUES (?, ?, ?, ?, 'hackernews', ?, ?)`,
+        [`seed-mn-${i}-${stamp}`, 'purge-test', now, now, `seed-src-${i}-${stamp}`, kwId],
+      )
+    }
+    const roomCount = async (table: string) =>
+      (
+        (await wsSql(request, doomedId, `SELECT COUNT(*) AS n FROM ${table}`)) as Array<{
+          n: number
+        }>
+      )[0]?.n ?? 0
+    expect(await roomCount('c_keywords')).toBe(3)
+    expect(await roomCount('c_mentions')).toBe(3)
+
+    // Delete it: switcher → Delete workspace → type-to-confirm.
     await a.page.getByTestId('workspace-switcher').click()
     await a.page.getByTestId('workspace-delete-item').click()
     const dialog = a.page.locator('dialog[open]')
     await expect(dialog.getByText(`Delete ${doomed}?`)).toBeVisible({ timeout: 10_000 })
-    await dialog.getByRole('button', { name: 'Delete workspace' }).click()
+    // The destructive button stays disabled until the exact name is typed.
+    await expect(a.page.getByTestId('delete-workspace-submit')).toBeDisabled()
+    await a.page.getByTestId('delete-workspace-confirm').fill(doomed)
+    await expect(a.page.getByTestId('delete-workspace-submit')).toBeEnabled()
+    await a.page.getByTestId('delete-workspace-submit').click()
 
     // Registry row is gone…
     await expect
       .poll(async () => workspaceRowCount(request, doomed), { timeout: 20_000 })
       .toBe(0)
+
+    // …the purge-workspace job wipes the tenant room's data…
+    await expect.poll(() => roomCount('c_keywords'), { timeout: 45_000 }).toBe(0)
+    await expect.poll(() => roomCount('c_mentions'), { timeout: 45_000 }).toBe(0)
 
     // …and the selection re-points to a workspace the user can still enter
     // (never the deleted one), so the app doesn't hang on a dead tenant.

@@ -9,6 +9,7 @@ import { buildCronContext, enqueueJob } from 'deepspace/worker'
 import type { IngestEnv } from './ingestion/context'
 import type { CronContext } from './ingestion/context'
 import { purgeKeywordData, sweepKeyword, type KeywordEnvelope } from './ingestion'
+import { WORKSPACE_ROOM_SCHEMAS } from './workspace-schemas'
 import { buildQuotaMap } from './ingestion/quota'
 import type { AlertRule, Keyword, Mention, WebhookEndpoint } from './types'
 import { buildScoringPrompt, parseScore, SCORING_SYSTEM_PROMPT } from './scoring'
@@ -41,6 +42,21 @@ export interface PurgeKeywordPayload {
   keywordId: string
   workspaceId: string
 }
+
+/** Payload for the purge-workspace job — wipes every tenant-room collection
+ * of a deleted workspace (its registry row is already gone, so the room is
+ * unreachable; this reclaims the storage). */
+export interface PurgeWorkspacePayload {
+  workspaceId: string
+}
+
+/**
+ * Deletes per pickup across purge jobs. Each query/delete is one DO
+ * subrequest and a DO invocation allows ~1000, so stay well under; a job
+ * that hits the cap throws and JobRoom retries — progress persists, so
+ * repeated pickups converge.
+ */
+const MAX_PURGE_DELETES_PER_RUN = 800
 
 interface DeliverSlackPayload {
   mention: Mention
@@ -122,10 +138,34 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
 
     case 'purge-keyword': {
       const { keywordId } = job.payload as unknown as PurgeKeywordPayload
-      // Generous cap: the queue is serial, so finish in one pickup when
-      // possible; throw on !done so JobRoom retries for the remainder.
-      const { purged, done } = await purgeKeywordData(tools, keywordId, 2000)
+      const { purged, done } = await purgeKeywordData(tools, keywordId, MAX_PURGE_DELETES_PER_RUN)
       if (!done) throw new Error(`purge incomplete after ${purged} deletes — retrying`)
+      return { purged }
+    }
+
+    case 'purge-workspace': {
+      // `tools` is already scoped to the ws:<id> room via the payload's
+      // workspaceId. Wipe every tenant collection (derived from the schema
+      // list so new collections are covered automatically). The room's
+      // seeded `users` rows are left — negligible, and the room is already
+      // unreachable without a registry row.
+      let purged = 0
+      for (const schema of WORKSPACE_ROOM_SCHEMAS) {
+        for (;;) {
+          if (purged >= MAX_PURGE_DELETES_PER_RUN) {
+            throw new Error(`purge incomplete after ${purged} deletes — retrying`)
+          }
+          const batch = (await tools.records.query(schema.name, {
+            limit: Math.min(100, MAX_PURGE_DELETES_PER_RUN - purged),
+          })) as Array<{ recordId: string }>
+          if (batch.length === 0) break
+          for (const r of batch) {
+            await tools.records.delete(schema.name, r.recordId)
+            purged++
+          }
+        }
+      }
+      console.log(`[purge] workspace ${payloadWs}: ${purged} records deleted`)
       return { purged }
     }
 

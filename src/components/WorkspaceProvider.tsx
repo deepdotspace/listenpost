@@ -18,7 +18,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { useAuth, useMutations, useQuery, useUsers, type RecordData } from 'deepspace'
+import { getAuthToken, useAuth, useMutations, useQuery, useUsers, type RecordData } from 'deepspace'
 
 const STORAGE_KEY = 'listenpost-workspace'
 
@@ -130,7 +130,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth()
   const { records, status } = useQuery<WorkspaceData>('workspaces', { orderBy: 'createdAt' })
-  const { create, put, remove } = useMutations<WorkspaceData>('workspaces')
+  const { create, put } = useMutations<WorkspaceData>('workspaces')
   // App-room user directory — invite-by-email resolves against it.
   const { users } = useUsers()
 
@@ -263,7 +263,20 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
     }
     const deletedId = current.recordId
     try {
-      await remove(deletedId)
+      // Server action: deletes the registry row AND enqueues a purge of the
+      // tenant room (keywords, mentions, alerts, …) — deletion is permanent.
+      const res = await fetch('/api/actions/deleteWorkspace', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${await getAuthToken()}`,
+        },
+        body: JSON.stringify({ workspaceId: deletedId }),
+      })
+      const json = (await res.json()) as { success?: boolean; error?: string }
+      if (!res.ok || !json.success) {
+        return { ok: false, error: json.error ?? `Delete failed (${res.status})` }
+      }
       // Re-select the first remaining workspace the user can enter; the live
       // query drops the deleted row, but the persisted selection still points
       // at it, so steer the selection explicitly rather than relying on the
@@ -280,7 +293,7 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
     } catch (err) {
       return { ok: false, error: String(err) }
     }
-  }, [current, remove, select, userId, workspaces])
+  }, [current, select, userId, workspaces])
 
   const value = useMemo<WorkspaceContextValue>(
     () => ({

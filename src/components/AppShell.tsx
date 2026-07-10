@@ -195,25 +195,13 @@ export default function AppShell({ children }: { children: ReactNode }) {
  * look. All data comes from WorkspaceProvider (app-room scope).
  */
 function WorkspaceSwitcher() {
-  const { workspaces, current, currentId, isOwner, select, deleteWorkspace } = useWorkspace()
-  const { success, error } = useToast()
+  const { workspaces, current, currentId, isOwner, select } = useWorkspace()
   const [createOpen, setCreateOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
 
   const name = current?.data.name ?? 'No workspace'
   const initial = (current?.data.name?.[0] ?? '?').toUpperCase()
-
-  async function onConfirmDelete() {
-    if (deleting) return
-    setDeleting(true)
-    const result = await deleteWorkspace()
-    setDeleting(false)
-    setDeleteOpen(false)
-    if (result.ok) success('Workspace deleted')
-    else error('Delete failed', result.error)
-  }
 
   return (
     <div className="shrink-0 border-b border-border px-2.5 py-2">
@@ -277,16 +265,87 @@ function WorkspaceSwitcher() {
 
       <CreateWorkspaceModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <ManageMembersModal open={membersOpen} onClose={() => setMembersOpen(false)} />
-      <ConfirmModal
-        open={deleteOpen}
-        onClose={() => setDeleteOpen(false)}
-        onConfirm={onConfirmDelete}
-        title={`Delete ${name}?`}
-        description="This permanently removes the workspace and every keyword, mention, and alert inside it. This cannot be undone."
-        confirmText="Delete workspace"
-        loading={deleting}
-      />
+      <DeleteWorkspaceModal open={deleteOpen} onClose={() => setDeleteOpen(false)} />
     </div>
+  )
+}
+
+/**
+ * Owner-only, type-to-confirm workspace deletion. Deletion is PERMANENT:
+ * the server action removes the registry row and purges the tenant room
+ * (keywords, mentions, alerts, digests, webhooks) — so the confirm gate
+ * requires typing the workspace name, not just a button click.
+ */
+function DeleteWorkspaceModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { current, deleteWorkspace } = useWorkspace()
+  const { success, error } = useToast()
+  const [typed, setTyped] = useState('')
+  const [deleting, setDeleting] = useState(false)
+
+  const name = current?.data.name ?? ''
+  const nameMatches = typed.trim() === name && name.length > 0
+
+  function close() {
+    setTyped('')
+    onClose()
+  }
+
+  async function onSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!nameMatches || deleting) return
+    setDeleting(true)
+    const result = await deleteWorkspace()
+    setDeleting(false)
+    if (result.ok) {
+      close()
+      success('Workspace deleted', 'All of its data is being cleared.')
+    } else {
+      error('Delete failed', result.error)
+    }
+  }
+
+  return (
+    <Modal open={open} onClose={close} size="sm">
+      <Modal.Header onClose={close}>
+        <Modal.Title className="text-[15px]">Delete {name}?</Modal.Title>
+        <Modal.Description className="text-[13px]">
+          This <span className="font-semibold text-foreground">permanently deletes</span> the
+          workspace and all of its data — every keyword, mention, alert, digest, and webhook.
+          Members lose access immediately. This cannot be undone.
+        </Modal.Description>
+      </Modal.Header>
+      <form onSubmit={onSubmit}>
+        <Modal.Body className="space-y-2">
+          <label htmlFor="delete-workspace-confirm" className="block text-[12px] text-muted-foreground">
+            Type <span className="font-semibold text-foreground">{name}</span> to confirm
+          </label>
+          <Input
+            id="delete-workspace-confirm"
+            data-testid="delete-workspace-confirm"
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={name}
+            autoFocus
+            autoComplete="off"
+            className="h-9 text-[13px]"
+          />
+        </Modal.Body>
+        <Modal.Footer>
+          <Button type="button" variant="ghost" onClick={close} disabled={deleting}>
+            Cancel
+          </Button>
+          <Button
+            type="submit"
+            variant="destructive"
+            data-testid="delete-workspace-submit"
+            disabled={!nameMatches}
+            loading={deleting}
+          >
+            Delete workspace
+          </Button>
+        </Modal.Footer>
+      </form>
+    </Modal>
   )
 }
 

@@ -8,7 +8,7 @@ import {
   type WorkspaceRowData,
 } from '../server/workspace-access'
 import { purgeKeywordData } from '../ingestion'
-import type { PurgeKeywordPayload, SweepKeywordPayload } from '../jobs'
+import type { PurgeKeywordPayload, PurgeWorkspacePayload, SweepKeywordPayload } from '../jobs'
 
 /** Workspace row iff `userId` is a member (or the app owner); else null. */
 async function requireMembership(
@@ -121,5 +121,45 @@ export const actions: Record<string, ActionHandler<Env>> = {
       )
     }
     return { success: true, data: { purged, done } }
+  },
+
+  /**
+   * Delete a workspace: remove its registry row AND wipe its tenant room.
+   * One privileged path — the ownership check must happen while the
+   * registry row still exists, and the client's own RBAC couldn't purge
+   * the ws room anyway. Owner-only (workspaceRoleFor 'admin' = workspace
+   * owner or app owner); deletion is permanent.
+   */
+  deleteWorkspace: async ({ userId, params, env }) => {
+    const workspaceId = String(params.workspaceId ?? '').trim()
+    if (!workspaceId) return { success: false, error: 'workspaceId required' }
+
+    const ws = await getWorkspaceData(env, workspaceId)
+    if (!ws || workspaceRoleFor(env, ws, userId) !== 'admin') {
+      return { success: false, error: 'Only the workspace owner can delete it' }
+    }
+
+    // Registry row first (revokes all access instantly), then the purge job
+    // for the now-unreachable room. Never the other way around: a purge of
+    // a still-registered workspace would wipe live tenant data.
+    const appCtx = buildCronContext(env, env.OWNER_USER_ID, `app:${env.APP_NAME}`)
+    await appCtx.records.delete('workspaces', workspaceId)
+
+    let purgeQueued = true
+    try {
+      await enqueueJob(
+        env.JOB_ROOMS,
+        `app:${env.APP_NAME}`,
+        'purge-workspace',
+        { workspaceId } satisfies PurgeWorkspacePayload,
+        { maxAttempts: 10 },
+      )
+    } catch (err) {
+      // The workspace is already deleted and unreachable — don't fail the
+      // action over cleanup; the data is inert, just not reclaimed.
+      console.error(`[deleteWorkspace] purge enqueue failed for ${workspaceId}:`, err)
+      purgeQueued = false
+    }
+    return { success: true, data: { purgeQueued } }
   },
 }
