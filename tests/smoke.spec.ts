@@ -57,7 +57,8 @@ test.describe('Smoke tests', () => {
     await expect(page.getByTestId('auth-overlay')).toHaveCount(0)
     await expect(page.getByTestId('quota-details')).toContainText('15,000')
     await expect(page.getByTestId('quota-details')).toContainText('50,000')
-    await expect(page.getByTestId('quota-details')).toContainText('$0.013')
+    await expect(page.getByTestId('quota-details')).toContainText('$0.003')
+    await expect(page.getByTestId('quota-details')).toContainText('$0.0025')
   })
 
   test('keywords page is auth-gated when signed out', async ({ page }) => {

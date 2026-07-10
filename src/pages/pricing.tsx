@@ -1,6 +1,7 @@
 /**
- * Pricing — public page. Plans mirror Listenpost: Trial (5k mentions/mo),
- * Pro $159 (15k), Scale $499 (50k), with per-mention overage on paid tiers.
+ * Pricing — public page. Trial (5k mentions/mo), Pro $79 (15k), Scale $239
+ * (50k), with per-mention overage on paid tiers — cost + ~25-30% margin
+ * (see src/subscriptions.ts for the cost model).
  * One card per plan: name, price, blurb, quota + overage, select button.
  */
 
@@ -93,7 +94,12 @@ export default function PricingPage() {
                       <>
                         then{' '}
                         <span className="font-semibold tabular-nums text-foreground">
-                          ${(OVERAGE_PER_MENTION_CENTS[slug] / 100).toFixed(3)}
+                          {/* Up to 4 decimals, trailing zeros trimmed — .toFixed(3)
+                              would round Scale's $0.0025 up to Pro's $0.003. */}
+                          ${(OVERAGE_PER_MENTION_CENTS[slug] / 100)
+                            .toFixed(4)
+                            .replace(/0+$/, '')
+                            .replace(/\.$/, '')}
                         </span>{' '}
                         per extra mention
                       </>
