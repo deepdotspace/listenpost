@@ -6,3 +6,6 @@ dist
 .worker-bundle.js
 *.tgz
 test-results/
+
+# internal planning doc — kept locally, not part of the public repo
+OCTOLENS-CLONE-PLAN.md

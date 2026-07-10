@@ -1,8 +1,9 @@
 # Listenpost
 
-> AI keyword monitoring for buying intent — a full-featured social-listening
-> product built on the [DeepSpace SDK](https://www.npmjs.com/package/deepspace)
-> as its flagship showcase app.
+> An open-source alternative to [Octolens](https://octolens.com) — AI keyword
+> monitoring for buying intent, built with the
+> [DeepSpace SDK](https://www.npmjs.com/package/deepspace) as its flagship
+> showcase app. MIT licensed.
 >
 > **Live:** https://listenpost.app.space
 
@@ -141,5 +142,8 @@ src/pages/                 File-based routes (generouted); (protected)/ is auth-
 tests/                     Playwright suite (16 specs: smoke, api, collab,
                            isolation, keyword lifecycle/cap, workspace delete,
                            webhooks, live-prod) + vitest unit tests in tests/unit
-OCTOLENS-CLONE-PLAN.md     Original build plan (historical) + status addendum
 ```
+
+## License
+
+[MIT](LICENSE)
