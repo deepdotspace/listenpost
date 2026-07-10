@@ -21,16 +21,43 @@ export const tasks: CronTask[] = [
   { name: 'send-digests', intervalMinutes: 15 },
 ]
 
+interface WorkspaceRow {
+  recordId: string
+  data: { name?: string; owner_user?: string; is_active?: number }
+}
+
+/** Active workspaces from the app-room registry (tenancy root). */
+async function listWorkspaces(ctx: CronContext): Promise<WorkspaceRow[]> {
+  return (await ctx.records.query('workspaces', {
+    where: { is_active: 1 },
+    limit: 200,
+  })) as WorkspaceRow[]
+}
+
 export async function runTask(name: string, env: unknown): Promise<void> {
   if (name === 'heartbeat') return // liveness only; the DO records the run
 
   const e = env as IngestEnv
-  const ctx = buildCronContext(e, e.OWNER_USER_ID, `app:${e.APP_NAME}`)
+  const appCtx = buildCronContext(e, e.OWNER_USER_ID, `app:${e.APP_NAME}`)
 
-  if (name === 'poll-sources') {
-    await runIngestion(ctx, e)
-  } else if (name === 'send-digests') {
-    await sendDueDigests(ctx, e)
+  // Multi-tenant sweep: each workspace's data lives in its own room.
+  const workspaces = await listWorkspaces(appCtx)
+
+  for (const ws of workspaces) {
+    const wsCtx = buildCronContext(e, e.OWNER_USER_ID, `ws:${ws.recordId}`)
+    try {
+      if (name === 'poll-sources') {
+        await runIngestion(wsCtx, e, {
+          workspaceId: ws.recordId,
+          ownerId: ws.data.owner_user ?? e.OWNER_USER_ID,
+        })
+      } else if (name === 'send-digests') {
+        await sendDueDigests(wsCtx, e)
+      }
+    } catch (err) {
+      // One tenant's failure must not stall the sweep for the others.
+      console.error(`[cron] ${name} failed for workspace ${ws.recordId}:`, err)
+    }
   }
 }
 

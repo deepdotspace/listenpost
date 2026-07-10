@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from 'deepspace/testing'
+import { ensureWorkspace, wsSql } from './helpers/workspace'
 
 /**
  * Phase 7 verification — the Octolens-style data-layer REST API.
@@ -8,18 +9,18 @@ import { test, expect, type APIRequestContext } from 'deepspace/testing'
 
 const SOURCE_ID = `__apitest-${Date.now()}__`
 
-async function seedMention(request: APIRequestContext, sentiment: string, suffix: string) {
+async function seedMention(request: APIRequestContext, wsId: string, sentiment: string, suffix: string) {
   const now = new Date().toISOString()
-  await request.post('/api/debug/sql', {
-    data: {
-      sql: `INSERT INTO c_mentions (_row_id, _created_by, _created_at, _updated_at,
-              col_source, col_source_id, col_title, col_body, col_url,
-              col_relevance, col_sentiment, col_status, col_tags)
-            VALUES (?, 'test-seed', ?, ?, 'hackernews', ?, ?, 'body', 'https://example.com',
-              'high', ?, 'new', '["bug_report"]')`,
-      params: [`row-${SOURCE_ID}-${suffix}`, now, now, `${SOURCE_ID}-${suffix}`, `Title ${suffix}`, sentiment],
-    },
-  })
+  await wsSql(
+    request,
+    wsId,
+    `INSERT INTO c_mentions (_row_id, _created_by, _created_at, _updated_at,
+        col_source, col_source_id, col_title, col_body, col_url,
+        col_relevance, col_sentiment, col_status, col_tags)
+      VALUES (?, 'test-seed', ?, ?, 'hackernews', ?, ?, 'body', 'https://example.com',
+        'high', ?, 'new', '["bug_report"]')`,
+    [`row-${SOURCE_ID}-${suffix}`, now, now, `${SOURCE_ID}-${suffix}`, `Title ${suffix}`, sentiment],
+  )
 }
 
 test.describe('Data-layer API', () => {
@@ -39,10 +40,13 @@ test.describe('Data-layer API', () => {
 
     const [user] = await users(1)
     const { page } = user
+    // The generated key auto-binds to the caller's current workspace, so the
+    // seeds must land in that same tenant room.
+    const wsId = await ensureWorkspace(page)
 
     try {
-      await seedMention(request, 'negative', 'neg')
-      await seedMention(request, 'positive', 'pos')
+      await seedMention(request, wsId, 'negative', 'neg')
+      await seedMention(request, wsId, 'positive', 'pos')
 
       // Generate a key through the UI; capture the one-time raw key.
       await page.goto('/api-keys')
@@ -98,9 +102,7 @@ test.describe('Data-layer API', () => {
       })
       expect(after.status()).toBe(401)
     } finally {
-      await request.post('/api/debug/sql', {
-        data: { sql: `DELETE FROM c_mentions WHERE col_source_id LIKE ?`, params: [`${SOURCE_ID}%`] },
-      })
+      await wsSql(request, wsId, `DELETE FROM c_mentions WHERE col_source_id LIKE ?`, [`${SOURCE_ID}%`])
       await request.post('/api/debug/sql', {
         data: { sql: `DELETE FROM c_api_keys WHERE col_label = 'e2e test key'` },
       })

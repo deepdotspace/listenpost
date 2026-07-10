@@ -19,6 +19,8 @@ const SCORING_MODEL = 'claude-haiku-4-5-20251001'
  * so the job doesn't have to re-fetch records. */
 export interface ScoreMentionPayload {
   mentionId: string
+  /** Tenant whose room holds the mention (jobs queue is app-wide). */
+  workspaceId?: string
   mention: Mention
   keyword: Pick<Keyword, 'term' | 'keyword_type' | 'brand_context'>
 }
@@ -27,17 +29,23 @@ interface DeliverSlackPayload {
   mention: Mention
   ruleName: string
   channel: string
+  workspaceId?: string
 }
 
 interface DeliverWebhookPayload {
   mention: Mention
   mentionId: string
   endpointId: string
+  workspaceId?: string
 }
 
 export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<unknown> {
   const e = env as IngestEnv & { SLACK_BOT_TOKEN?: string }
-  const tools = buildCronContext(e, e.OWNER_USER_ID, `app:${e.APP_NAME}`)
+  // All record reads/writes happen in the payload's tenant room; jobs
+  // enqueued before tenancy (no workspaceId) fall back to the app room.
+  const payloadWs = (job.payload as { workspaceId?: string } | undefined)?.workspaceId
+  const roomId = payloadWs ? `ws:${payloadWs}` : `app:${e.APP_NAME}`
+  const tools = buildCronContext(e, e.OWNER_USER_ID, roomId)
 
   switch (job.type) {
     case 'score-mention': {
@@ -74,7 +82,7 @@ export async function runJob(job: Job, _ctx: JobContext, env: unknown): Promise<
 
       // Route the now-scored mention to matching alert rules + webhooks.
       const scored: Mention = { ...mention, ...score }
-      await evaluateDeliveries(tools, e, scored, mentionId)
+      await evaluateDeliveries(tools, e, scored, mentionId, payloadWs)
 
       return score
     }
@@ -148,8 +156,9 @@ async function evaluateDeliveries(
   env: IngestEnv,
   mention: Mention,
   mentionId: string,
+  workspaceId: string | undefined,
 ): Promise<void> {
-  const roomId = `app:${env.APP_NAME}`
+  const roomId = `app:${env.APP_NAME}` // job QUEUE room — record reads use `tools`
 
   const rules = (await tools.records.query('alert_rules', {
     where: { is_active: 1 },
@@ -163,13 +172,14 @@ async function evaluateDeliveries(
         mention,
         ruleName: rule.data.name,
         channel: rule.data.target.channelId,
+        workspaceId,
       })
     } else if (rule.data.channel === 'webhook' && rule.data.target?.endpointId) {
       await enqueueJob(
         env.JOB_ROOMS,
         roomId,
         'deliver-webhook',
-        { mention, mentionId, endpointId: rule.data.target.endpointId },
+        { mention, mentionId, endpointId: rule.data.target.endpointId, workspaceId },
         { maxAttempts: 3 },
       )
     }
@@ -195,7 +205,7 @@ async function evaluateDeliveries(
       env.JOB_ROOMS,
       roomId,
       'deliver-webhook',
-      { mention, mentionId, endpointId: endpoint.recordId },
+      { mention, mentionId, endpointId: endpoint.recordId, workspaceId },
       { maxAttempts: 3 },
     )
   }

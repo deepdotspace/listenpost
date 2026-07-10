@@ -34,7 +34,9 @@ function stripHtml(html: string): string {
     .trim()
 }
 
-const FIRST_POLL_BACKFILL_SECONDS = 7 * 24 * 3600
+// 30 days: a new keyword should land with a meaningful feed, not 3 rows —
+// a 7-day window made low-volume keywords look broken ("why only 4?").
+const FIRST_POLL_BACKFILL_SECONDS = 30 * 24 * 3600
 const PAGE_SIZE = 50
 
 export const hackernewsFetcher: SourceFetcher = {

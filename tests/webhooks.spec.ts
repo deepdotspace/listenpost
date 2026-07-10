@@ -1,4 +1,5 @@
-import { test, expect, type APIRequestContext } from 'deepspace/testing'
+import { test, expect } from 'deepspace/testing'
+import { ensureWorkspace, wsSql } from './helpers/workspace'
 import http from 'node:http'
 import { createHmac } from 'node:crypto'
 import type { AddressInfo } from 'node:net'
@@ -38,10 +39,13 @@ test.describe('Webhook delivery', () => {
 
     const [user] = await users(1)
     const { page } = user
+    let wsId = ''
 
     try {
-      // Elevate to admin — webhook endpoints are admin-managed.
-      await setRole(request, user.email, 'admin')
+      // Workspace OWNERS are admin inside their tenant room (the /ws gate
+      // upserts the role on connect), so the owner can manage webhook
+      // endpoints without any elevation — this is the product behavior.
+      wsId = await ensureWorkspace(page)
 
       // 1. Configure the endpoint via the UI, capturing the signing secret.
       await page.goto('/alerts')
@@ -77,29 +81,24 @@ test.describe('Webhook delivery', () => {
       expect(first.signature).toBe(expected)
     } finally {
       server.close()
-      await setRole(request, user.email, 'member')
-      // Remove everything this spec created.
-      await request.post('/api/debug/sql', {
-        data: { sql: `DELETE FROM c_webhook_endpoints` },
-      })
-      const sel = await request.post('/api/debug/sql', {
-        data: { sql: `SELECT _row_id FROM c_keywords WHERE col_term = ?`, params: [TERM] },
-      })
-      const selJson = (await sel.json()) as { rows?: Array<{ _row_id: string }> }
-      for (const row of selJson.rows ?? []) {
-        for (const sql of [
-          `DELETE FROM c_mentions WHERE col_keyword_id = ?`,
-          `DELETE FROM c_sources_state WHERE col_keyword_id = ?`,
-          `DELETE FROM c_keywords WHERE _row_id = ?`,
-        ]) {
-          await request.post('/api/debug/sql', { data: { sql, params: [row._row_id] } })
+      // Remove everything this spec created (tenant-scoped collections). The
+      // ws-room role reverts implicitly — the workspace is created fresh per run.
+      if (wsId) {
+        await wsSql(request, wsId, `DELETE FROM c_webhook_endpoints`)
+        const rows = (await wsSql(request, wsId, `SELECT _row_id FROM c_keywords WHERE col_term = ?`, [
+          TERM,
+        ])) as Array<{ _row_id: string }>
+        for (const row of rows) {
+          for (const sql of [
+            `DELETE FROM c_mentions WHERE col_keyword_id = ?`,
+            `DELETE FROM c_sources_state WHERE col_keyword_id = ?`,
+            `DELETE FROM c_keywords WHERE _row_id = ?`,
+          ]) {
+            await wsSql(request, wsId, sql, [row._row_id])
+          }
         }
       }
     }
   })
 })
 
-async function setRole(request: APIRequestContext, email: string, role: string) {
-  const res = await request.post('/api/debug/set-role', { data: { email, role } })
-  expect(res.ok()).toBeTruthy()
-}

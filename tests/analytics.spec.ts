@@ -1,4 +1,5 @@
 import { test, expect, type APIRequestContext } from 'deepspace/testing'
+import { ensureWorkspace, wsSql } from './helpers/workspace'
 
 /**
  * Phase 8 verification — analytics aggregates match the underlying
@@ -9,32 +10,34 @@ const MARK = `__analytics-${Date.now()}__`
 
 async function seed(
   request: APIRequestContext,
+  wsId: string,
   suffix: string,
   opts: { source: string; sentiment: string; daysAgo: number },
 ) {
   const at = new Date(Date.now() - opts.daysAgo * 24 * 3600_000).toISOString()
-  await request.post('/api/debug/sql', {
-    data: {
-      sql: `INSERT INTO c_mentions (_row_id, _created_by, _created_at, _updated_at,
-              col_source, col_source_id, col_title, col_relevance, col_sentiment, col_status, col_tags)
-            VALUES (?, 'test-seed', ?, ?, ?, ?, ?, 'high', ?, 'new', '[]')`,
-      params: [`row-${MARK}-${suffix}`, at, at, opts.source, `${MARK}-${suffix}`, `T ${suffix}`, opts.sentiment],
-    },
-  })
+  await wsSql(
+    request,
+    wsId,
+    `INSERT INTO c_mentions (_row_id, _created_by, _created_at, _updated_at,
+        col_source, col_source_id, col_title, col_relevance, col_sentiment, col_status, col_tags)
+      VALUES (?, 'test-seed', ?, ?, ?, ?, ?, 'high', ?, 'new', '[]')`,
+    [`row-${MARK}-${suffix}`, at, at, opts.source, `${MARK}-${suffix}`, `T ${suffix}`, opts.sentiment],
+  )
 }
 
 test.describe('Analytics', () => {
   test('aggregates match records; range filter re-windows', async ({ users, request }) => {
     const [user] = await users(1)
     const { page } = user
+    const wsId = await ensureWorkspace(page)
 
     try {
-      // Ensure a clean slate for exact-count assertions.
-      await request.post('/api/debug/sql', { data: { sql: 'DELETE FROM c_mentions' } })
-      await seed(request, 'a', { source: 'hackernews', sentiment: 'negative', daysAgo: 1 })
-      await seed(request, 'b', { source: 'hackernews', sentiment: 'positive', daysAgo: 1 })
-      await seed(request, 'c', { source: 'bluesky', sentiment: 'positive', daysAgo: 1 })
-      await seed(request, 'old', { source: 'bluesky', sentiment: 'negative', daysAgo: 40 })
+      // Ensure a clean slate for exact-count assertions (tenant room).
+      await wsSql(request, wsId, 'DELETE FROM c_mentions')
+      await seed(request, wsId, 'a', { source: 'hackernews', sentiment: 'negative', daysAgo: 1 })
+      await seed(request, wsId, 'b', { source: 'hackernews', sentiment: 'positive', daysAgo: 1 })
+      await seed(request, wsId, 'c', { source: 'bluesky', sentiment: 'positive', daysAgo: 1 })
+      await seed(request, wsId, 'old', { source: 'bluesky', sentiment: 'negative', daysAgo: 40 })
 
       await page.goto('/analytics')
       const tiles = page.getByTestId('stat-tiles')
@@ -66,9 +69,7 @@ test.describe('Analytics', () => {
       await expect(page.getByTestId('chart-sentiment')).toContainText('positive')
       await expect(page.getByTestId('chart-sentiment')).toContainText('negative')
     } finally {
-      await request.post('/api/debug/sql', {
-        data: { sql: `DELETE FROM c_mentions WHERE col_source_id LIKE ?`, params: [`${MARK}%`] },
-      })
+      await wsSql(request, wsId, `DELETE FROM c_mentions WHERE col_source_id LIKE ?`, [`${MARK}%`])
     }
   })
 })

@@ -1,5 +1,6 @@
 import { test } from '@playwright/test'
 import { loadAllTestAccounts } from 'deepspace/testing'
+import { ensureWorkspace } from './helpers/workspace'
 
 /**
  * UX audit helper — signs in on the LIVE app as the first pooled test
@@ -51,6 +52,8 @@ test.describe('Live UX audit', () => {
       { email: account.email, password: account.password },
     )
     if (!ok) throw new Error(`sign-in failed for ${account.email}`)
+
+    await ensureWorkspace(page)
 
     for (const p of PAGES) {
       await page.goto(p.path, { waitUntil: 'domcontentloaded' })

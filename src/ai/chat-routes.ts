@@ -33,6 +33,7 @@ import {
 import type { ChatTurn, VerifyResult } from 'deepspace/worker'
 import { schemas } from '../schemas.js'
 import { buildSystemPrompt, buildTools } from './tools.js'
+import { resolveWorkspaceRole, workspaceRoomStub } from '../server/workspace-access.js'
 // Type-only — TypeScript strips these at runtime, so no circular import
 // with worker.ts (which imports `registerAiChatRoutes` from this file).
 import type { Env, AppContext } from '../../worker.js'
@@ -70,8 +71,22 @@ const ALLOWED_MODELS: Record<string, 'anthropic' | 'openai' | 'cerebras'> = {
 // turns, ~3x cheaper than Opus, and the same 1M-token context.
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
 
-function recordRoomStub(env: Env): DurableObjectStub {
-  return env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
+/**
+ * Chats (and the record tools the assistant uses) are workspace-scoped:
+ * the client sends `x-workspace-id`, we verify membership, and target that
+ * workspace's room — so the assistant only ever reads the caller's tenant.
+ * Returns null when the header is missing or the caller isn't a member.
+ */
+async function resolveChatRoom(
+  c: { req: { header: (name: string) => string | undefined } },
+  env: Env,
+  userId: string,
+): Promise<DurableObjectStub | null> {
+  const workspaceId = c.req.header('x-workspace-id')
+  if (!workspaceId) return null
+  const role = await resolveWorkspaceRole(env, workspaceId, userId)
+  if (!role) return null
+  return workspaceRoomStub(env, workspaceId)
 }
 
 // Cap on user-supplied content length. Far above any realistic message;
@@ -95,7 +110,8 @@ export function registerAiChatRoutes(
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
 
     const body = await c.req.json<{ title?: string }>().catch(() => ({} as { title?: string }))
-    const stub = recordRoomStub(c.env)
+    const stub = await resolveChatRoom(c, c.env, auth.userId)
+    if (!stub) return c.json({ error: "workspace access required" }, 403)
     const chat = await createChat(stub, auth.userId, {
       title: body.title ?? 'New chat',
     })
@@ -108,7 +124,8 @@ export function registerAiChatRoutes(
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
 
     const id = c.req.param('id')
-    const stub = recordRoomStub(c.env)
+    const stub = await resolveChatRoom(c, c.env, auth.userId)
+    if (!stub) return c.json({ error: "workspace access required" }, 403)
     const chat = await getChat(stub, id, auth.userId)
     if (!chat) return c.json({ error: 'Not found' }, 404)
 
@@ -125,7 +142,8 @@ export function registerAiChatRoutes(
     if (!auth) return c.json({ error: 'Unauthorized' }, 401)
 
     const id = c.req.param('id')
-    const stub = recordRoomStub(c.env)
+    const stub = await resolveChatRoom(c, c.env, auth.userId)
+    if (!stub) return c.json({ error: "workspace access required" }, 403)
     const chat = await getChat(stub, id, auth.userId)
     if (!chat) return c.json({ error: 'Not found' }, 404)
 
@@ -167,7 +185,8 @@ export function registerAiChatRoutes(
       return c.json({ error: `Unknown modelId: ${modelId}` }, 400)
     }
 
-    const stub = recordRoomStub(c.env)
+    const stub = await resolveChatRoom(c, c.env, auth.userId)
+    if (!stub) return c.json({ error: "workspace access required" }, 403)
     const chat = await getChat(stub, chatId, auth.userId)
     if (!chat) {
       console.warn('[ai-chat] REQUEST chat-not-found', { userId: auth.userId, chatId })

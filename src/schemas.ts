@@ -19,6 +19,7 @@ import { apiKeysSchema } from './schemas/api-keys-schema'
 import { notificationTargetsSchema } from './schemas/notification-targets-schema'
 import { digestsSchema } from './schemas/digests-schema'
 import { sourcesStateSchema } from './schemas/sources-state-schema'
+import { workspacesSchema } from './schemas/workspaces-schema'
 
 export const schemas: CollectionSchema[] = [
   ...aiChatSchemas,
@@ -32,4 +33,5 @@ export const schemas: CollectionSchema[] = [
   notificationTargetsSchema,
   digestsSchema,
   sourcesStateSchema,
+  workspacesSchema,
 ]

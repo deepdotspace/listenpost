@@ -118,46 +118,47 @@ function Content({
   align?: 'start' | 'end'
   children: ReactNode
 }) {
-  const { open, setOpen, triggerRef, contentRef } = useMenu()
+  const { open, triggerRef, contentRef } = useMenu()
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
 
-  // Position after first paint of the portal (needs the menu's real size).
+  // Track the trigger every frame while open. A one-shot measurement can be
+  // taken mid-layout (e.g. during a scope remount) and freeze the menu at a
+  // stale off-screen position; per-frame tracking also keeps it glued to the
+  // trigger through page scroll and resize. One getBoundingClientRect per
+  // frame for a short-lived menu is negligible.
   useLayoutEffect(() => {
     if (!open) {
       setPos(null)
       return
     }
-    const trigger = triggerRef.current
-    const content = contentRef.current
-    if (!trigger || !content) return
 
-    const r = trigger.getBoundingClientRect()
-    const cw = content.offsetWidth
-    const ch = content.offsetHeight
+    let raf = 0
+    const track = () => {
+      const trigger = triggerRef.current
+      const content = contentRef.current
+      if (trigger && content) {
+        const r = trigger.getBoundingClientRect()
+        const cw = content.offsetWidth
+        const ch = content.offsetHeight
 
-    let left = align === 'end' ? r.right - cw : r.left
-    left = Math.max(VIEWPORT_MARGIN, Math.min(left, window.innerWidth - cw - VIEWPORT_MARGIN))
+        let left = align === 'end' ? r.right - cw : r.left
+        left = Math.max(VIEWPORT_MARGIN, Math.min(left, window.innerWidth - cw - VIEWPORT_MARGIN))
 
-    // Open downward; flip above the trigger when there's no room.
-    let top = r.bottom + TRIGGER_GAP
-    if (top + ch > window.innerHeight - VIEWPORT_MARGIN) {
-      top = Math.max(VIEWPORT_MARGIN, r.top - ch - TRIGGER_GAP)
+        // Open downward; flip above the trigger when there's no room.
+        let top = r.bottom + TRIGGER_GAP
+        if (top + ch > window.innerHeight - VIEWPORT_MARGIN) {
+          top = Math.max(VIEWPORT_MARGIN, r.top - ch - TRIGGER_GAP)
+        }
+
+        setPos((prev) =>
+          prev && prev.top === top && prev.left === left ? prev : { top, left },
+        )
+      }
+      raf = requestAnimationFrame(track)
     }
-
-    setPos({ top, left })
+    track()
+    return () => cancelAnimationFrame(raf)
   }, [open, align, triggerRef, contentRef])
-
-  // A fixed-position menu would drift from its trigger on scroll — close instead.
-  useEffect(() => {
-    if (!open) return
-    const close = () => setOpen(false)
-    window.addEventListener('scroll', close, { capture: true, passive: true })
-    window.addEventListener('resize', close)
-    return () => {
-      window.removeEventListener('scroll', close, { capture: true })
-      window.removeEventListener('resize', close)
-    }
-  }, [open, setOpen])
 
   if (!open) return null
 
@@ -172,7 +173,9 @@ function Content({
         visibility: pos ? 'visible' : 'hidden',
       }}
       className={cn(
-        'z-50 min-w-[160px] overflow-hidden rounded-lg border border-border bg-popover p-1 shadow-[0_4px_20px_0_rgba(0,0,0,0.1)]',
+        // Long menus (e.g. many workspaces) scroll inside the popover — a
+        // fixed-position portal can't be scrolled into view by the page.
+        'z-50 max-h-[min(420px,calc(100dvh-16px))] min-w-[160px] overflow-y-auto rounded-lg border border-border bg-popover p-1 shadow-[0_4px_20px_0_rgba(0,0,0,0.1)]',
         className,
       )}
     >

@@ -1,20 +1,25 @@
 #!/usr/bin/env bash
-# Seed demo mentions into the local dev DB via the debug SQL route.
-# Usage: scripts/seed-demo.sh [port]   (default 5174)
+# Seed demo mentions into a WORKSPACE room via the debug SQL route.
+# Usage: scripts/seed-demo.sh <workspaceId> [port]   (port default 5174)
+#
+# Find a workspaceId: sign in, open the app, then in devtools run
+#   localStorage.getItem('octolens-workspace')
+# or query the app room: SELECT _row_id, col_name FROM c_workspaces.
 set -euo pipefail
-PORT="${1:-5174}"
-URL="http://localhost:${PORT}/api/debug/sql"
+WS="${1:?workspaceId required — see header}"
+PORT="${2:-5174}"
+URL="http://localhost:${PORT}/api/debug/sql?room=ws:${WS}"
 
 sql() {
   curl -s -X POST "$URL" -H 'Content-Type: application/json' -d "$1" > /dev/null
 }
 
-# Ensure a demo keyword exists to hang mentions off (id demo-kw-1).
 now=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+# A demo keyword to hang mentions off (id demo-kw-1), inside the workspace room.
 sql "{\"sql\":\"INSERT OR IGNORE INTO c_keywords (_row_id,_created_by,_created_at,_updated_at,col_term,col_keyword_type,col_brand_context,col_sources,col_is_active,col_created_by_user) VALUES ('demo-kw-1','seed','$now','$now','octolens','brand','Octolens is an AI keyword monitoring tool for devtools teams.','[\"hackernews\",\"reddit\",\"bluesky\"]',1,'seed')\"}"
 
 i=0
-seed_mention() { # source|source_id_suffix|title|body|author|relevance|score|sentiment|tags|status|engagement_json|hours_ago|assigned
+seed_mention() { # source|suffix|title|body|author|relevance|score|sentiment|tags|status|engagement|hours|assigned
   IFS='|' read -r src suffix title body author rel score sent tags mstatus engagement hours assigned <<< "$1"
   i=$((i+1))
   local ts
@@ -33,4 +38,4 @@ seed_mention 'news|n1|Social listening startups see renewed VC interest in 2026|
 seed_mention 'reddit|r3|octolens vs brand24 — which has better reddit coverage?|Specifically care about niche subreddits. Anyone compared them head to head?|u/saas_scout|low|0.28|neutral|[\"comparison\",\"question\"]|ignored|{\"points\":18,\"comments\":7}|98|NULL'
 seed_mention 'reddit|r4|Their webhook alerts have been flaky for weeks|Actively looking at alternatives. Support has been slow to respond, open to suggestions.|r/devtools|high|0.88|negative|[\"churn_risk\",\"complaint\"]|new|{\"points\":56,\"comments\":34}|1|NULL'
 
-echo "Seeded $i mentions + demo keyword."
+echo "Seeded $i mentions + demo keyword into ws:${WS}."

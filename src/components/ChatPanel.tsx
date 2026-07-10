@@ -38,6 +38,7 @@ import {
   decodeAiStreamChunk,
   type AiStreamAction,
 } from 'deepspace'
+import { useWorkspace } from './WorkspaceProvider'
 
 type ModelOption = { id: string; label: string; provider: string }
 
@@ -129,6 +130,7 @@ const DEFAULT_MODELS: ModelOption[] = [
 function useStreamingChat(
   chatId: string | null,
   modelId: string | undefined,
+  workspaceId: string | null,
   onChatCreated?: (id: string) => void,
 ) {
   const [inFlight, setInFlight] = useState<InFlightMessage[]>([])
@@ -188,6 +190,8 @@ function useStreamingChat(
             headers: {
               'Content-Type': 'application/json',
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
+              // All /api/ai/* routes are tenant-scoped: 403 without this.
+              ...(workspaceId ? { 'x-workspace-id': workspaceId } : {}),
             },
             body: JSON.stringify({}),
           })
@@ -219,6 +223,7 @@ function useStreamingChat(
           headers: {
             'Content-Type': 'application/json',
             ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            ...(workspaceId ? { 'x-workspace-id': workspaceId } : {}),
           },
           body: JSON.stringify({ chatId: activeChatId, userMessageId, content, modelId }),
           signal: abortRef.current.signal,
@@ -273,7 +278,7 @@ function useStreamingChat(
         // the server-emitted `X-Asst-Id` header captured into `serverId`.
       }
     },
-    [chatId, modelId, onChatCreated],
+    [chatId, modelId, workspaceId, onChatCreated],
   )
 
   const stop = useCallback(() => {
@@ -488,9 +493,13 @@ export function ChatPanel({
   const groupedModels = useMemo(() => groupModelsByProvider(models), [models])
   const selectedModel = models.find((m) => m.id === modelId)
 
+  // Tenant scoping: every /api/ai/* call must carry the workspace id.
+  const { currentId: workspaceId } = useWorkspace()
+
   const { send, stop, retry, isLoading, error, inFlight } = useStreamingChat(
     chatId,
     modelId,
+    workspaceId,
     onChatCreated,
   )
 

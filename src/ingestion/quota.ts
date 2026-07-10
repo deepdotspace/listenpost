@@ -26,33 +26,23 @@ export async function buildQuotaMap(
   monthStart.setUTCDate(1)
   monthStart.setUTCHours(0, 0, 0, 0)
 
-  // Recent window (soft count — the newest 1000 rows cover typical volumes;
-  // beyond that the cap has long since tripped anyway).
+  // Tenancy: `ctx` is a WORKSPACE room, so every mention in it belongs to
+  // this tenant — usage is simply the month's row count. (The old
+  // per-keyword-creator mapping under-counted when a member, not the
+  // owner, created the keyword.) Soft count over the newest 1000 rows;
+  // beyond that the cap has long since tripped anyway.
   const recent = (await ctx.records.query('mentions', { limit: 1000 })) as Array<{
-    createdBy: string
     createdAt: string
-    data: { keyword_id?: string }
   }>
-  const keywordOwners = new Map<string, string>() // keyword_id → owner
-  const keywords = (await ctx.records.query('keywords', { limit: 200 })) as Array<{
-    recordId: string
-    createdBy: string
-  }>
-  for (const k of keywords) keywordOwners.set(k.recordId, k.createdBy)
-
-  const used = new Map<string, number>()
-  for (const m of recent) {
-    if (new Date(m.createdAt).getTime() < monthStart.getTime()) continue
-    const owner = m.data.keyword_id ? keywordOwners.get(m.data.keyword_id) : undefined
-    if (!owner) continue
-    used.set(owner, (used.get(owner) ?? 0) + 1)
-  }
+  const usedThisMonth = recent.filter(
+    (m) => new Date(m.createdAt).getTime() >= monthStart.getTime(),
+  ).length
 
   const map = new Map<string, QuotaState>()
   for (const ownerId of new Set(ownerIds)) {
     const tier = await resolveTier(env, ownerId)
     const { quota, hardCap } = quotaForTier(tier)
-    map.set(ownerId, { tier, quota, hardCap, used: used.get(ownerId) ?? 0 })
+    map.set(ownerId, { tier, quota, hardCap, used: usedThisMonth })
   }
   return map
 }
