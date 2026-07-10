@@ -2,8 +2,7 @@
 
 > An open-source alternative to [Octolens](https://octolens.com) — AI keyword
 > monitoring for buying intent, built with the
-> [DeepSpace SDK](https://www.npmjs.com/package/deepspace) as its flagship
-> showcase app. MIT licensed.
+> [DeepSpace SDK](https://www.npmjs.com/package/deepspace). MIT licensed.
 >
 > **Live:** https://listenpost.app.space
 
