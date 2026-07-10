@@ -51,20 +51,32 @@ interface KeywordEnvelope {
   }
 }
 
-export async function runIngestion(ctx: CronContext, env: IngestEnv): Promise<void> {
+/** The tenant a sweep runs for — quota bills the workspace owner. */
+export interface IngestTenant {
+  workspaceId: string
+  ownerId: string
+}
+
+export async function runIngestion(
+  ctx: CronContext,
+  env: IngestEnv,
+  tenant: IngestTenant,
+): Promise<void> {
   const keywords = (await ctx.records.query('keywords', {
     where: { is_active: 1 },
   })) as KeywordEnvelope[]
+  if (keywords.length === 0) return
 
-  // Per-customer monthly quota (keyed by keyword owner), once per sweep.
-  const quotas = await buildQuotaMap(ctx, env, keywords.map((k) => k.createdBy))
+  // Monthly quota, keyed by the workspace owner, once per sweep.
+  const quotas = await buildQuotaMap(ctx, env, [tenant.ownerId])
+  const quota = quotas.get(tenant.ownerId)
 
   for (const keyword of keywords) {
     const enabled = keyword.data.sources ?? []
     for (const fetcher of FETCHERS) {
       if (!enabled.includes(fetcher.id)) continue
       try {
-        await pollSourceForKeyword(ctx, env, fetcher, keyword, quotas.get(keyword.createdBy))
+        await pollSourceForKeyword(ctx, env, fetcher, keyword, tenant, quota)
       } catch (err) {
         // One bad source/keyword must not stall the whole sweep.
         console.error(`[ingest] ${fetcher.id} × "${keyword.data.term}" failed:`, err)
@@ -78,6 +90,7 @@ async function pollSourceForKeyword(
   env: IngestEnv,
   fetcher: SourceFetcher,
   keyword: KeywordEnvelope,
+  tenant: IngestTenant,
   quota: QuotaState | undefined,
 ): Promise<void> {
   const [stateRow] = await ctx.records.query('sources_state', {
@@ -105,8 +118,8 @@ async function pollSourceForKeyword(
     if (existing.length > 0) continue
 
     // Plan quota: free tier stops here; paid tiers continue and meter overage.
-    if (!consumeQuota(env, keyword.createdBy, quota)) {
-      console.log(`[ingest] quota hard-cap hit for owner ${keyword.createdBy} — skipping rest of poll`)
+    if (!consumeQuota(env, tenant.ownerId, quota)) {
+      console.log(`[ingest] quota hard-cap hit for owner ${tenant.ownerId} — skipping rest of poll`)
       break
     }
 
@@ -137,6 +150,7 @@ async function pollSourceForKeyword(
         'score-mention',
         {
           mentionId: recordId,
+          workspaceId: tenant.workspaceId,
           mention: { ...item, keyword_id: keyword.recordId },
           keyword: {
             term: keyword.data.term,

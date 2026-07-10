@@ -14,6 +14,9 @@ export const apiKeysSchema: CollectionSchema = {
     // First characters of the key, for display (e.g. "olk_a1b2…").
     { name: 'prefix', storage: 'text', interpretation: 'plain', immutable: true },
     { name: 'scopes', storage: 'text', interpretation: { kind: 'json' } },
+    // Tenant this key reads from. Keys live in the APP room (one place to
+    // resolve a Bearer hash); the API then queries `ws:<workspace_id>`.
+    { name: 'workspace_id', storage: 'text', interpretation: 'plain', immutable: true },
     { name: 'last_used_at', storage: 'text', interpretation: { kind: 'datetime' } },
     { name: 'is_active', storage: 'number', interpretation: { kind: 'boolean' }, default: 1 },
     { name: 'created_by_user', storage: 'text', interpretation: 'plain', userBound: true, immutable: true },

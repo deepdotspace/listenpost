@@ -22,6 +22,7 @@ import { useAuth, AuthOverlay, getAuthToken, useQuery } from 'deepspace'
 // Paths resolve post-install (page → src/pages/, components → src/components/).
 import { ChatPanel } from '../../components/ChatPanel'
 import { PageHeader, SectionLabel } from '../../components/PageHeader'
+import { useWorkspace } from '../../components/WorkspaceProvider'
 
 interface ChatRow {
   userId: string
@@ -54,6 +55,8 @@ function formatRelative(ts?: string): string {
 
 export default function AiChatPage() {
   const { isLoaded, isSignedIn, userId } = useAuth()
+  // All /api/ai/* routes require the tenant header (403 without it).
+  const { currentId: workspaceId } = useWorkspace()
   const [showAuth, setShowAuth] = useState(false)
   const [activeChatId, setActiveChatId] = useState<string | null>(null)
 
@@ -103,6 +106,7 @@ export default function AiChatPage() {
       const token = await getAuthToken()
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers.Authorization = `Bearer ${token}`
+      if (workspaceId) headers['x-workspace-id'] = workspaceId
       const res = await fetch('/api/ai/chats', { method: 'POST', headers })
       if (!res.ok) throw new Error(`create chat failed: ${res.status}`)
       const data = (await res.json()) as { chat?: { id?: string } }
@@ -113,7 +117,7 @@ export default function AiChatPage() {
     } finally {
       setCreatingChat(false)
     }
-  }, [])
+  }, [workspaceId])
 
   const handleDelete = useCallback(async (id: string) => {
     // Don't clear `activeChatId` until the DELETE actually succeeds: if it
@@ -127,6 +131,7 @@ export default function AiChatPage() {
       const token = await getAuthToken()
       const headers: Record<string, string> = {}
       if (token) headers.Authorization = `Bearer ${token}`
+      if (workspaceId) headers['x-workspace-id'] = workspaceId
       const res = await fetch(`/api/ai/chats/${id}`, { method: 'DELETE', headers })
       if (!res.ok) throw new Error(`delete failed: ${res.status}`)
       setActiveChatId((cur) => (cur === id ? null : cur))
@@ -134,13 +139,14 @@ export default function AiChatPage() {
       console.error('[ai-chat-page] delete failed:', err)
       setCreateError(err instanceof Error ? `Couldn't delete chat: ${err.message}` : "Couldn't delete chat")
     }
-  }, [])
+  }, [workspaceId])
 
   const handleRename = useCallback(async (id: string, title: string) => {
     try {
       const token = await getAuthToken()
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (token) headers.Authorization = `Bearer ${token}`
+      if (workspaceId) headers['x-workspace-id'] = workspaceId
       const res = await fetch(`/api/ai/chats/${id}`, {
         method: 'PATCH',
         headers,
@@ -150,7 +156,7 @@ export default function AiChatPage() {
     } catch (err) {
       console.error('[ai-chat-page] rename failed:', err)
     }
-  }, [])
+  }, [workspaceId])
 
   if (!isLoaded) {
     return (

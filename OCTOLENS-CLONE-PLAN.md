@@ -2,8 +2,28 @@
 
 > **Purpose.** Build a full-featured **Octolens** clone (social listening / brand monitoring) on the **DeepSpace SDK**, as the first flagship "look how powerful this is" showcase app. This document is written to be opened cold in a **fresh build session**. Read it top to bottom once, then execute the phases in order.
 >
-> **Status:** planning complete, build not started.
-> **Target:** a deployed app at `octolens-clone.app.space` (pick your own subdomain) that reproduces every Octolens feature using DeepSpace primitives.
+> **Status:** ✅ ALL 10 PHASES SHIPPED (2026-07-09) — plus post-plan work the
+> plan didn't foresee. This file is now a historical planning artifact;
+> **current state, architecture, and TODOs live in [README.md](README.md).**
+>
+> **Post-plan addendum (what shipped beyond the phases):**
+> - **UI/UX overhaul ×2** — first a ground-up console design (sidebar shell,
+>   compact primitives), then a full light-theme redesign from a design
+>   handoff (Hanken Grotesk + JetBrains Mono, indigo accent, Mentions
+>   Table/Feed/Board modes, portal dropdowns, inset focus rings).
+> - **Multi-tenant workspaces** — the plan's single shared team room became
+>   real tenancy: a `workspaces` registry in the app room, one RecordRoom DO
+>   per tenant (`ws:<id>`), a membership gate on `/ws/:roomId`, per-workspace
+>   cron sweeps + job payloads + quota, workspace-bound API keys, workspace
+>   switcher / onboarding / invites, and an isolation spec.
+> - **Rebrand:** the product is now **Listenpost** (legal caution around the
+>   Octolens name); deploy target moves to `listenpost.app.space`.
+> - **TODO (next session):** per-customer **Slack OAuth** ("Connect Slack")
+>   — see README §TODO for the full plan; the current single
+>   `SLACK_BOT_TOKEN` wiring is demo-only. Also outstanding: Stripe checkout
+>   verification (owner action), custom domain, MCP stretch goal.
+>
+> **Original target:** a deployed app at `octolens-clone.app.space` (pick your own subdomain) that reproduces every Octolens feature using DeepSpace primitives.
 
 ---
 

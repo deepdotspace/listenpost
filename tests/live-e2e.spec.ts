@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import { loadAllTestAccounts } from 'deepspace/testing'
+import { ensureWorkspace } from './helpers/workspace'
 
 /**
  * Live end-to-end (Phase 10 launch verification) — against the DEPLOYED app.
@@ -44,6 +45,10 @@ test.describe('Live production e2e', () => {
         { email: account.email, password: account.password },
       )
       expect(ok, `sign-in failed for ${account.email}`).toBe(true)
+
+      // Signed-in users need a workspace before protected pages render; drive
+      // onboarding (idempotent) and select the tenant for the rest of the run.
+      await ensureWorkspace(page)
 
       // Signed-in users get redirected off the landing to the live feed.
       await page.goto('/')

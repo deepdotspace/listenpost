@@ -11,11 +11,13 @@
  * cleanup. No need to manage browser contexts manually.
  */
 import { test, expect } from 'deepspace/testing'
+import { ensureWorkspace } from './helpers/workspace'
 
 test('two users render with their own names', async ({ users }) => {
   const [a, b] = await users(2)
 
-  await Promise.all([a.page.goto('/'), b.page.goto('/')])
+  // Onboarding lands each user on /mentions with nav visible.
+  await Promise.all([ensureWorkspace(a.page), ensureWorkspace(b.page)])
 
   await expect(a.page.getByTestId('app-navigation')).toBeVisible({ timeout: 15_000 })
   await expect(b.page.getByTestId('app-navigation')).toBeVisible({ timeout: 15_000 })
@@ -26,6 +28,7 @@ test('two users render with their own names', async ({ users }) => {
 
 test('API status page renders loading success and error states', async ({ users }) => {
   const [user] = await users(1)
+  await ensureWorkspace(user.page)
   let shouldFail = false
   let requestCount = 0
 
@@ -68,6 +71,7 @@ test('API status page renders loading success and error states', async ({ users 
 
 test('API status page shows local retry after first-load API failure', async ({ users }) => {
   const [user] = await users(1)
+  await ensureWorkspace(user.page)
   let requestCount = 0
 
   await user.page.route('**/api/integrations', async (route) => {

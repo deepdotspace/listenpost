@@ -26,6 +26,7 @@ import { runJob } from './src/jobs.js'
 import { schemas } from './src/schemas.js'
 import { integrations } from './src/integrations.js'
 import { registerAiChatRoutes } from './src/ai/chat-routes.js'
+import { resolveWorkspaceRole, ensureWorkspaceAdminRow } from './src/server/workspace-access.js'
 
 // =============================================================================
 // DO Manifest — declares all Durable Objects for dynamic deploy bindings
@@ -276,7 +277,10 @@ app.all('/api/debug/*', async (c) => {
   if (c.env.ALLOW_DEBUG_ROUTES !== 'true') {
     return c.notFound()
   }
-  const stub = c.env.RECORD_ROOMS.get(c.env.RECORD_ROOMS.idFromName(`app:${c.env.APP_NAME}`))
+  // `?room=ws:<id>` targets a tenant room (specs seed/clean tenant data);
+  // default stays the app room. Dev-only route — same gating as before.
+  const room = new URL(c.req.url).searchParams.get('room') ?? `app:${c.env.APP_NAME}`
+  const stub = c.env.RECORD_ROOMS.get(c.env.RECORD_ROOMS.idFromName(room))
   // Forward verbatim, preserving method, headers, body, and the full URL
   // (the DO's debug handler dispatches on url.pathname).
   return stub.fetch(c.req.raw)
@@ -426,10 +430,48 @@ function wsRoute(
   }
 }
 
-app.get(
-  '/ws/:roomId',
-  wsRoute((env) => env.RECORD_ROOMS),
-)
+/**
+ * Workspace (tenant) room access — `ws:<workspaceRecordId>`.
+ *
+ * Every distinct roomId is its own RecordRoom DO, so per-tenant isolation
+ * hinges entirely on THIS gate: a `ws:*` connection requires a verified JWT
+ * whose subject is the workspace owner (→ admin in the room) or a member
+ * (→ member). Everyone else gets 403. The registry row lives in the app room;
+ * the resolver is shared with the AI chat routes (src/server/workspace-access).
+ */
+app.get('/ws/:roomId', async (c) => {
+  const roomId = c.req.param('roomId')
+
+  if (roomId.startsWith('ws:')) {
+    const url = new URL(c.req.url)
+    const token = url.searchParams.get('token')
+    const auth = token ? (await verifyJwt(jwtConfig(c.env), token)).result : null
+    if (!auth) return new Response('Unauthorized', { status: 401 })
+
+    const workspaceId = roomId.slice(3)
+    const role = await resolveWorkspaceRole(c.env, workspaceId, auth.userId)
+    if (!role) return new Response('Forbidden', { status: 403 })
+
+    // Owners must hold role=admin in the tenant room's users collection —
+    // the room seeds first-time users as `member`, and UI gates read that
+    // row, not the connection role. Idempotent upsert before connecting.
+    if (role === 'admin') {
+      await ensureWorkspaceAdminRow(c.env, workspaceId, {
+        userId: auth.userId,
+        name: auth.claims.name,
+        email: auth.claims.email,
+        imageUrl: auth.claims.image,
+      })
+    }
+
+    return wsRoute(
+      (env) => env.RECORD_ROOMS,
+      () => ({ role }),
+    )(c)
+  }
+
+  return wsRoute((env) => env.RECORD_ROOMS)(c)
+})
 
 type DocsYjsRole = 'admin' | 'member' | 'viewer'
 
@@ -609,11 +651,16 @@ app.post('/api/v2/mentions', async (c) => {
   const keyHash = await hashApiKey(rawKey)
   const keyLookup = await tools.query('api_keys', { where: { key_hash: keyHash }, limit: 1 })
   const keyRow = keyLookup.success
-    ? (keyLookup.data as { records: Array<{ recordId: string; data: { is_active?: number; last_used_at?: string } }> }).records[0]
+    ? (keyLookup.data as { records: Array<{ recordId: string; data: { is_active?: number; last_used_at?: string; workspace_id?: string } }> }).records[0]
     : undefined
   if (!keyRow || !keyRow.data.is_active) {
     return c.json({ error: 'invalid or revoked API key' }, 401)
   }
+  // Keys are tenant-bound: mentions come from the key's workspace room.
+  if (!keyRow.data.workspace_id) {
+    return c.json({ error: 'key is not bound to a workspace — generate a new key' }, 401)
+  }
+  const wsTools = createActionTools(c.env, c.env.OWNER_USER_ID, '', `ws:${keyRow.data.workspace_id}`)
 
   interface MentionsRequest {
     filters?: {
@@ -635,7 +682,7 @@ app.post('/api/v2/mentions', async (c) => {
   const limit = Math.min(Math.max(body.limit ?? 25, 1), 100)
   const f = body.filters ?? {}
 
-  const result = await tools.query<MentionEnvelope['data']>('mentions', {
+  const result = await wsTools.query<MentionEnvelope['data']>('mentions', {
     orderBy: 'createdAt',
     orderDir: 'desc',
     limit: 500,
@@ -871,8 +918,15 @@ app.get('*', async (c) => {
 // Action Tools — route to app's own RecordRoom DO
 // =============================================================================
 
-function createActionTools(env: Env, userId: string, callerJwt: string): ActionTools {
-  const stub = env.RECORD_ROOMS.get(env.RECORD_ROOMS.idFromName(`app:${env.APP_NAME}`))
+function createActionTools(
+  env: Env,
+  userId: string,
+  callerJwt: string,
+  roomId?: string,
+): ActionTools {
+  const stub = env.RECORD_ROOMS.get(
+    env.RECORD_ROOMS.idFromName(roomId ?? `app:${env.APP_NAME}`),
+  )
 
   // Internal helper — DO returns `ActionResult<unknown>`. Callers below
   // cast to the precisely-typed result for each operation. The cast is

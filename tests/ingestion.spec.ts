@@ -1,4 +1,5 @@
 import { test, expect } from 'deepspace/testing'
+import { ensureWorkspace, wsSql } from './helpers/workspace'
 
 /**
  * Phase 2 verification — the poll-sources cron ingests real HN mentions
@@ -16,6 +17,7 @@ test.describe('HN ingestion', () => {
     test.setTimeout(240_000)
     const [user] = await users(1)
     const { page } = user
+    const wsId = await ensureWorkspace(page)
 
     try {
       // 1. Create the keyword (HN source is on by default).
@@ -53,17 +55,16 @@ test.describe('HN ingestion', () => {
       await expect(scored.first()).toBeVisible({ timeout: 120000 })
     } finally {
       // Cleanup: remove the keyword and everything ingested for it.
-      const sel = await request.post('/api/debug/sql', {
-        data: { sql: `SELECT _row_id FROM c_keywords WHERE col_term = ?`, params: [TERM] },
-      })
-      const selJson = (await sel.json()) as { rows?: Array<{ _row_id: string }> }
-      for (const row of selJson.rows ?? []) {
+      const rows = (await wsSql(request, wsId, `SELECT _row_id FROM c_keywords WHERE col_term = ?`, [
+        TERM,
+      ])) as Array<{ _row_id: string }>
+      for (const row of rows) {
         for (const sql of [
           `DELETE FROM c_mentions WHERE col_keyword_id = ?`,
           `DELETE FROM c_sources_state WHERE col_keyword_id = ?`,
           `DELETE FROM c_keywords WHERE _row_id = ?`,
         ]) {
-          await request.post('/api/debug/sql', { data: { sql, params: [row._row_id] } })
+          await wsSql(request, wsId, sql, [row._row_id])
         }
       }
     }

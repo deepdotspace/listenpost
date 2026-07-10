@@ -32,6 +32,7 @@ import {
 } from 'lucide-react'
 import { DropdownMenu, EmptyState, SkeletonList, useToast, cn } from '@/components/ui'
 import { PageHeader } from '../../components/PageHeader'
+import { useWorkspace } from '../../components/WorkspaceProvider'
 import type { Keyword, Mention, MentionStatus, Relevance, Sentiment } from '../../types'
 
 type Layout = 'table' | 'feed' | 'board'
@@ -143,7 +144,9 @@ export default function MentionsPage() {
   const { put } = useMutations<Mention>('mentions')
   const { user } = useUser()
   const { getName } = useUserLookup()
-  const { peers, connected } = usePresenceRoom('feed:mentions')
+  // Presence is per-workspace — peers in another tenant shouldn't show here.
+  const { currentId } = useWorkspace()
+  const { peers, connected } = usePresenceRoom(`feed:${currentId}:mentions`)
   const { error } = useToast()
 
   const [filters, setFilters] = useState<Filters>(NO_FILTERS)

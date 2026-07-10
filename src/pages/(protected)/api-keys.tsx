@@ -19,6 +19,7 @@ import {
   cn,
 } from '@/components/ui'
 import { PageHeader, SectionLabel } from '../../components/PageHeader'
+import { useWorkspace } from '../../components/WorkspaceProvider'
 import type { ApiKey } from '../../types'
 
 /** 32×18 accent switch — drives the same is_active mutation surface. */
@@ -51,7 +52,14 @@ function shortWhen(iso?: string): string {
 }
 
 export default function ApiKeysPage() {
-  const { records: keys, status } = useQuery<ApiKey>('api_keys', { orderBy: 'createdAt', orderDir: 'desc' })
+  // Keys live in the APP room but are scoped to a tenant via workspace_id —
+  // the generate action requires it, and the list shows only this workspace's.
+  const { currentId } = useWorkspace()
+  const { records: keys, status } = useQuery<ApiKey>('api_keys', {
+    where: { workspace_id: currentId ?? '__none__' },
+    orderBy: 'createdAt',
+    orderDir: 'desc',
+  })
   const { put, remove } = useMutations<ApiKey>('api_keys')
   const { success, error } = useToast()
 
@@ -71,7 +79,7 @@ export default function ApiKeysPage() {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${await getAuthToken()}`,
         },
-        body: JSON.stringify({ label: label.trim() }),
+        body: JSON.stringify({ label: label.trim(), workspaceId: currentId }),
       })
       const json = (await res.json()) as { success: boolean; data?: { rawKey: string }; error?: string }
       if (!json.success || !json.data) throw new Error(json.error ?? 'unknown error')
