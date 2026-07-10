@@ -150,11 +150,9 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
   const workspaces = useMemo(() => {
     const all = (records ?? []) as WorkspaceEnvelope[]
     if (!userId) return all
-    return all.filter(
-      (w) =>
-        ownerOf(w) === userId ||
-        (Array.isArray(w.data.member_ids) && w.data.member_ids.includes(userId)),
-    )
+    // memberIdsOf, not raw member_ids: json columns can surface as strings,
+    // and a raw-string row would silently hide a legit member's workspace.
+    return all.filter((w) => ownerOf(w) === userId || memberIdsOf(w).includes(userId))
   }, [records, userId])
 
   // Restore the persisted selection; fall back to the first visible workspace
