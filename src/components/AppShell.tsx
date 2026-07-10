@@ -10,7 +10,7 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { AuthOverlay, useAuthProfileReady, signOut, useQuery, useSubscription } from 'deepspace'
-import { ArrowUpRight, LogOut, Menu, Plus, Radar, Users, X } from 'lucide-react'
+import { ArrowUpRight, LogOut, Menu, Plus, Radar, Trash2, Users, X } from 'lucide-react'
 import { Button, ConfirmModal, DropdownMenu, Input, Modal, useToast } from '@/components/ui'
 import { ROLE_CONFIG, type Role } from '../constants'
 import { navGroups } from '../nav'
@@ -195,12 +195,25 @@ export default function AppShell({ children }: { children: ReactNode }) {
  * look. All data comes from WorkspaceProvider (app-room scope).
  */
 function WorkspaceSwitcher() {
-  const { workspaces, current, currentId, isOwner, select } = useWorkspace()
+  const { workspaces, current, currentId, isOwner, select, deleteWorkspace } = useWorkspace()
+  const { success, error } = useToast()
   const [createOpen, setCreateOpen] = useState(false)
   const [membersOpen, setMembersOpen] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
 
   const name = current?.data.name ?? 'No workspace'
   const initial = (current?.data.name?.[0] ?? '?').toUpperCase()
+
+  async function onConfirmDelete() {
+    if (deleting) return
+    setDeleting(true)
+    const result = await deleteWorkspace()
+    setDeleting(false)
+    setDeleteOpen(false)
+    if (result.ok) success('Workspace deleted')
+    else error('Delete failed', result.error)
+  }
 
   return (
     <div className="shrink-0 border-b border-border px-2.5 py-2">
@@ -236,21 +249,43 @@ function WorkspaceSwitcher() {
             </span>
           </DropdownMenu.Item>
           {isOwner && (
-            <DropdownMenu.Item
-              data-testid="workspace-members-item"
-              onClick={() => setMembersOpen(true)}
-            >
-              <span className="flex items-center gap-2">
-                <Users className="h-3.5 w-3.5 text-tertiary" aria-hidden />
-                Manage members
-              </span>
-            </DropdownMenu.Item>
+            <>
+              <DropdownMenu.Item
+                data-testid="workspace-members-item"
+                onClick={() => setMembersOpen(true)}
+              >
+                <span className="flex items-center gap-2">
+                  <Users className="h-3.5 w-3.5 text-tertiary" aria-hidden />
+                  Manage members
+                </span>
+              </DropdownMenu.Item>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Item
+                data-testid="workspace-delete-item"
+                onClick={() => setDeleteOpen(true)}
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+              >
+                <span className="flex items-center gap-2">
+                  <Trash2 className="h-3.5 w-3.5" aria-hidden />
+                  Delete workspace
+                </span>
+              </DropdownMenu.Item>
+            </>
           )}
         </DropdownMenu.Content>
       </DropdownMenu>
 
       <CreateWorkspaceModal open={createOpen} onClose={() => setCreateOpen(false)} />
       <ManageMembersModal open={membersOpen} onClose={() => setMembersOpen(false)} />
+      <ConfirmModal
+        open={deleteOpen}
+        onClose={() => setDeleteOpen(false)}
+        onConfirm={onConfirmDelete}
+        title={`Delete ${name}?`}
+        description="This permanently removes the workspace and every keyword, mention, and alert inside it. This cannot be undone."
+        confirmText="Delete workspace"
+        loading={deleting}
+      />
     </div>
   )
 }
@@ -325,8 +360,9 @@ function CreateWorkspaceModal({ open, onClose }: { open: boolean; onClose: () =>
   )
 }
 
-/** Owner-only member management: list, invite by email, remove. */
-function ManageMembersModal({ open, onClose }: { open: boolean; onClose: () => void }) {
+/** Owner-only member management: list, invite by email, remove. Exported so
+ *  the admin page's "Invite" button opens the same flow as the switcher. */
+export function ManageMembersModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { current, members, inviteByEmail, removeMember } = useWorkspace()
   const { success, error } = useToast()
   const [email, setEmail] = useState('')

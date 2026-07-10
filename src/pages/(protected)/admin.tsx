@@ -25,6 +25,7 @@ import {
   cn,
 } from '@/components/ui'
 import { PageHeader, SectionLabel } from '../../components/PageHeader'
+import { ManageMembersModal } from '../../components/AppShell'
 import { ROLE_CONFIG } from 'deepspace'
 
 // ============================================================================
@@ -93,6 +94,7 @@ export default function AdminPage() {
   const isAdmin = user?.role === 'admin'
   const { users, setRole } = useUsers()
   const toast = useToast()
+  const [membersOpen, setMembersOpen] = useState(false)
 
   // Security: Don't render admin content if not an admin
   if (!isAdmin) {
@@ -131,9 +133,7 @@ export default function AdminPage() {
           <Button
             size="sm"
             className="h-8 gap-1.5 px-3 text-[12.5px] [&_svg]:size-3.5"
-            onClick={() =>
-              toast.success('Invite teammates', 'Share the app link — new sign-ins join as members.')
-            }
+            onClick={() => setMembersOpen(true)}
           >
             <UserPlus aria-hidden />
             Invite
@@ -170,6 +170,8 @@ export default function AdminPage() {
           </section>
         </div>
       </div>
+
+      <ManageMembersModal open={membersOpen} onClose={() => setMembersOpen(false)} />
     </div>
   )
 }

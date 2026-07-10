@@ -65,6 +65,8 @@ export interface WorkspaceContextValue {
   inviteByEmail: (email: string) => Promise<WorkspaceOpResult>
   /** Owner-only: remove a member (never the owner). */
   removeMember: (userId: string) => Promise<WorkspaceOpResult>
+  /** Owner-only: delete the current workspace; re-selects another after. */
+  deleteWorkspace: () => Promise<WorkspaceOpResult>
 }
 
 /** Defensive parse — json-interpreted columns can surface as raw strings. */
@@ -102,6 +104,7 @@ const SIGNED_OUT_VALUE: WorkspaceContextValue = {
   },
   inviteByEmail: async () => ({ ok: false, error: NOT_SIGNED_IN }),
   removeMember: async () => ({ ok: false, error: NOT_SIGNED_IN }),
+  deleteWorkspace: async () => ({ ok: false, error: NOT_SIGNED_IN }),
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)
@@ -127,7 +130,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
 function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
   const { userId } = useAuth()
   const { records, status } = useQuery<WorkspaceData>('workspaces', { orderBy: 'createdAt' })
-  const { create, put } = useMutations<WorkspaceData>('workspaces')
+  const { create, put, remove } = useMutations<WorkspaceData>('workspaces')
   // App-room user directory — invite-by-email resolves against it.
   const { users } = useUsers()
 
@@ -253,6 +256,32 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
     [current, put, userId],
   )
 
+  const deleteWorkspace = useCallback(async (): Promise<WorkspaceOpResult> => {
+    if (!current) return { ok: false, error: 'No workspace selected' }
+    if (!userId || ownerOf(current) !== userId) {
+      return { ok: false, error: 'Only the workspace owner can delete it' }
+    }
+    const deletedId = current.recordId
+    try {
+      await remove(deletedId)
+      // Re-select the first remaining workspace the user can enter; the live
+      // query drops the deleted row, but the persisted selection still points
+      // at it, so steer the selection explicitly rather than relying on the
+      // workspaces[0] fallback (which flickers through a dead workspace).
+      const next = workspaces.find((w) => w.recordId !== deletedId)
+      if (next) select(next.recordId)
+      else
+        try {
+          window.localStorage.removeItem(STORAGE_KEY)
+        } catch {
+          /* private mode — selection is session-only anyway */
+        }
+      return { ok: true }
+    } catch (err) {
+      return { ok: false, error: String(err) }
+    }
+  }, [current, remove, select, userId, workspaces])
+
   const value = useMemo<WorkspaceContextValue>(
     () => ({
       workspaces,
@@ -265,6 +294,7 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
       createWorkspace,
       inviteByEmail,
       removeMember,
+      deleteWorkspace,
     }),
     [
       workspaces,
@@ -277,6 +307,7 @@ function SignedInWorkspaceProvider({ children }: { children: ReactNode }) {
       createWorkspace,
       inviteByEmail,
       removeMember,
+      deleteWorkspace,
     ],
   )
 
