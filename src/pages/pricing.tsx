@@ -1,5 +1,5 @@
 /**
- * Pricing — public page. Plans mirror Octolens: Trial (5k mentions/mo),
+ * Pricing — public page. Plans mirror Listenpost: Trial (5k mentions/mo),
  * Pro $159 (15k), Scale $499 (50k), with per-mention overage on paid tiers.
  * One card per plan: name, price, blurb, quota + overage, select button.
  */

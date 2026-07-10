@@ -22,7 +22,7 @@ test.describe('Smoke tests', () => {
     const errors = captureConsoleErrors(page)
     await page.goto('/')
     await page.waitForSelector('[data-testid="landing-page"]', { timeout: 15000 })
-    await expect(page).toHaveTitle(/Octolens/)
+    await expect(page).toHaveTitle(/Listenpost/)
     await expect(
       page.getByRole('heading', { name: /Every mention\. Scored\. Routed\. Live\./i }),
     ).toBeVisible()

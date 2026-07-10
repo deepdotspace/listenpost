@@ -14,7 +14,7 @@ export default defineConfig({
   retries: 0,
   workers: 1,
   use: {
-    baseURL: 'https://octolens-clone.app.space',
+    baseURL: 'https://listenpost.app.space',
     headless: true,
   },
 })

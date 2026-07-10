@@ -614,7 +614,7 @@ app.get(
 )
 
 // ---------------------------------------------------------------------------
-// Data-layer REST API — Octolens-style. Bearer-authenticated with hashed
+// Data-layer REST API — Octolens-compatible. Bearer-authenticated with hashed
 // API keys (see src/actions generateApiKey), cursor pagination.
 // ---------------------------------------------------------------------------
 
@@ -643,7 +643,7 @@ interface MentionEnvelope {
 app.post('/api/v2/mentions', async (c) => {
   const header = c.req.header('Authorization')
   const rawKey = header?.startsWith('Bearer ') ? header.slice(7) : null
-  if (!rawKey || !rawKey.startsWith('olk_')) {
+  if (!rawKey || !rawKey.startsWith('lpk_')) {
     return c.json({ error: 'missing or malformed API key' }, 401)
   }
 

@@ -6,7 +6,7 @@
  *
  * Scope layout (multi-tenant):
  *   RecordProvider (auth + ScopeRegistry, allowAnonymous)
- *     RecordScope app:octolens-clone   — users, workspaces, api_keys, settings
+ *     RecordScope app:listenpost   — users, workspaces, api_keys, settings
  *       WorkspaceProvider              — selection, create, invite (app-room reads)
  *         RecordScope ws:<workspaceId> — keywords, mentions, alerts, digests, AI chats
  *           AppShell → routed page

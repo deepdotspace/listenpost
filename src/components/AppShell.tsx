@@ -57,7 +57,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-primary">
           <Radar className="h-[15px] w-[15px] text-primary-foreground" aria-hidden />
         </span>
-        <span className="text-[15px] font-bold tracking-tight text-foreground">Octolens</span>
+        <span className="text-[15px] font-bold tracking-tight text-foreground">Listenpost</span>
         <span className="ml-auto rounded bg-secondary px-1.5 py-0.5 font-mono text-[10px] font-medium text-tertiary">
           v2
         </span>
@@ -160,7 +160,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
           <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-primary">
             <Radar className="h-[13px] w-[13px] text-primary-foreground" aria-hidden />
           </span>
-          Octolens
+          Listenpost
         </span>
       </div>
       {drawerOpen && (

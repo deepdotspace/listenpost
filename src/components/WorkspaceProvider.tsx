@@ -20,7 +20,7 @@ import {
 } from 'react'
 import { useAuth, useMutations, useQuery, useUsers, type RecordData } from 'deepspace'
 
-const STORAGE_KEY = 'octolens-workspace'
+const STORAGE_KEY = 'listenpost-workspace'
 
 export interface WorkspaceData {
   name: string

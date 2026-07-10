@@ -11,7 +11,7 @@ import { Button, cn } from '@/components/ui'
 import { PageHeader } from '../../components/PageHeader'
 import { THEMES, getActiveTheme, type ThemeId } from '../../themes'
 
-const THEME_STORAGE_KEY = 'octolens-theme'
+const THEME_STORAGE_KEY = 'listenpost-theme'
 
 export default function SettingsPage() {
   const { user } = useUser()

@@ -40,7 +40,7 @@ export function WorkspaceOnboarding() {
           <span className="flex h-[30px] w-[30px] items-center justify-center rounded-[8px] bg-primary">
             <Radar className="h-[17px] w-[17px] text-primary-foreground" aria-hidden />
           </span>
-          <span className="text-[17px] font-bold tracking-tight text-foreground">Octolens</span>
+          <span className="text-[17px] font-bold tracking-tight text-foreground">Listenpost</span>
         </div>
 
         <div className="rounded-2xl border border-border bg-panel p-6 shadow-card">

@@ -1,5 +1,5 @@
 /**
- * Subscription plan declarations — mirrors Octolens's pricing.
+ * Subscription plan declarations — mirrors Listenpost's pricing.
  *
  * Edit this file then `deepspace deploy` to sync the plans to Stripe Products
  * and Prices. Keep `slug` stable — subscribers and tier checks refer to it.

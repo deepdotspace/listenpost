@@ -6,7 +6,7 @@
 > "Octolens clone"; rebranded to **Listenpost**.
 >
 > **Live:** https://listenpost.app.space *(rename in progress — previously
-> octolens-clone.app.space)*
+> listenpost.app.space)*
 
 You give it keywords (your brand, features, competitors, pain points). It
 crawls 10+ web sources on a cron, AI-scores every mention for relevance,
@@ -116,7 +116,7 @@ Testing notes:
          `deliver-slack` job reads the workspace's stored token and posts
          via direct `fetch` to Slack's API ($0/message — skip the proxy).
 - [ ] Rebrand deploy: `wrangler name` → `listenpost`, brand strings, key
-      prefix `olk_` → `lpk_`, webhook header → `X-Listenpost-Signature`
+      prefix `lpk_` → `lpk_`, webhook header → `X-Listenpost-Signature`
       *(in progress this session)*.
 - [ ] Stripe test-mode checkout verification through the pay wall + Stripe
       Connect onboarding at /earnings (owner action).

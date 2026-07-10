@@ -1,4 +1,4 @@
-name = "octolens-clone"
+name = "listenpost"
 compatibility_date = "2025-01-01"
 compatibility_flags = ["nodejs_compat"]
 main = "worker.ts"
@@ -35,7 +35,7 @@ bindings = [
 #   docs/proposals/binding-auto-provisioning.md
 
 [vars]
-APP_NAME = "octolens-clone"
+APP_NAME = "listenpost"
 
 [dev]
 port = 8780

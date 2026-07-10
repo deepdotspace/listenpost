@@ -61,7 +61,7 @@ export async function runTask(name: string, env: unknown): Promise<void> {
   }
 }
 
-const EMAIL_FROM_DEFAULT = 'Octolens <notifications@app.space>'
+const EMAIL_FROM_DEFAULT = 'Listenpost <notifications@app.space>'
 
 async function sendDueDigests(ctx: CronContext, env: IngestEnv): Promise<void> {
   const digests = (await ctx.records.query('digests', {
@@ -108,7 +108,7 @@ async function sendDigest(
   if (matching.length === 0) return // nothing to report — skip quietly
 
   const period = digest.data.schedule === 'weekly' ? 'This week' : 'Today'
-  const subject = `${period}: ${matching.length} mention${matching.length > 1 ? 's' : ''} — Octolens digest`
+  const subject = `${period}: ${matching.length} mention${matching.length > 1 ? 's' : ''} — Listenpost digest`
 
   if (digest.data.target?.email) {
     const itemsHtml = matching

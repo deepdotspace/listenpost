@@ -19,7 +19,7 @@ const DEMO_TERM = 'durable objects'
 
 test.describe('Live production e2e', () => {
   test.skip(
-    ({ baseURL }) => !baseURL?.includes('octolens-clone.app.space'),
+    ({ baseURL }) => !baseURL?.includes('listenpost.app.space'),
     'live-only: run with --config tests/live.config.ts',
   )
 
@@ -64,7 +64,7 @@ test.describe('Live production e2e', () => {
         await page
           .getByTestId('keyword-context')
           .fill(
-            'Octolens is a DeepSpace SDK showcase; Cloudflare Durable Objects discussions are exactly our audience.',
+            'Listenpost is a DeepSpace SDK showcase; Cloudflare Durable Objects discussions are exactly our audience.',
           )
         await page.getByTestId('save-keyword').click()
         await expect(existing.first()).toBeVisible()

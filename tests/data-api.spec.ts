@@ -2,7 +2,7 @@ import { test, expect, type APIRequestContext } from 'deepspace/testing'
 import { ensureWorkspace, wsSql } from './helpers/workspace'
 
 /**
- * Phase 7 verification — the Octolens-style data-layer REST API.
+ * Phase 7 verification — the Listenpost-style data-layer REST API.
  * Key generated via the UI (raw shown once), used as a Bearer token,
  * filtered queries return the documented shape, revocation 401s.
  */
@@ -33,7 +33,7 @@ test.describe('Data-layer API', () => {
       (
         await request.post('/api/v2/mentions', {
           data: {},
-          headers: { Authorization: 'Bearer olk_deadbeef' },
+          headers: { Authorization: 'Bearer lpk_deadbeef' },
         })
       ).status(),
     ).toBe(401)
@@ -53,9 +53,9 @@ test.describe('Data-layer API', () => {
       await expect(page.getByTestId('key-label')).toBeVisible({ timeout: 15000 })
       await page.getByTestId('key-label').fill('e2e test key')
       await page.getByTestId('generate-key').click()
-      await expect(page.getByTestId('raw-key')).toContainText('olk_', { timeout: 15000 })
+      await expect(page.getByTestId('raw-key')).toContainText('lpk_', { timeout: 15000 })
       const rawKey = (await page.getByTestId('raw-key').textContent())?.trim()
-      expect(rawKey).toMatch(/^olk_[0-9a-f]{48}$/)
+      expect(rawKey).toMatch(/^lpk_[0-9a-f]{48}$/)
       await page.getByRole('button', { name: 'Done' }).click()
 
       // Authorized query with a sentiment filter → only the negative seed.

@@ -1,7 +1,7 @@
 /**
  * Per-customer mention quota — resolved from the keyword owner's
  * subscription tier. Free tier hard-caps; paid tiers keep ingesting and
- * meter overage per mention (Octolens: $0.013 Pro / $0.01 Scale).
+ * meter overage per mention (Listenpost: $0.013 Pro / $0.01 Scale).
  */
 
 import { apiWorkerFetch, meterUsage } from 'deepspace/worker'

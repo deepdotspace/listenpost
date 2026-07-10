@@ -251,7 +251,7 @@ export default function ApiKeysPage() {
             <div className="overflow-x-auto rounded-xl border border-border bg-panel p-4 shadow-card">
               <pre className="font-mono text-[12px] leading-relaxed text-foreground">
                 {`curl -X POST ${typeof window !== 'undefined' ? window.location.origin : ''}/api/v2/mentions \\
-  -H "Authorization: Bearer olk_..." \\
+  -H "Authorization: Bearer lpk_..." \\
   -H "Content-Type: application/json" \\
   -d '{"filters":{"sentiment":["negative"]},"limit":25}'`}
               </pre>
